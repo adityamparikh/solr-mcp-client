@@ -146,23 +146,26 @@ export SOLR_MCP_CLIENT_CORS_ALLOWED_ORIGINS=https://solr-ui.example.com
 Origins are stated explicitly rather than left to defaults on purpose: an unqualified CORS mapping
 allows every origin, which matters here because the facade has no inbound authentication.
 
-### Verifying the server exposes the tools you expect
+### Verifying the server is really there
 
-`McpConnectionVerifier` proves a connection is *configured*; it cannot tell that the process on the
-other end is the Solr MCP server. A stale `SOLR_MCP_JAR`, or a `SOLR_MCP_HTTP_URL` pointing at some
-other MCP server, starts cleanly and then fails only as unhelpful answers — the assistant simply has
-no Solr tools to call.
+`McpToolVerifier` lists the server's tools at startup and fails if the list is empty. That one check
+covers both ways this goes wrong: no MCP connection configured at all, and a connection to something
+that is not the Apache Solr MCP server — a stale `SOLR_MCP_JAR`, or a `SOLR_MCP_HTTP_URL` pointing
+elsewhere. Either otherwise starts cleanly and fails only as unhelpful answers, because the
+assistant has nothing to call.
 
-Name the tools this deployment depends on and `McpToolVerifier` fails startup when any is absent:
+Optionally name the tools this deployment depends on, and startup fails when any is absent:
 
 ```bash
 export SOLR_MCP_CLIENT_EXPECTED_TOOLS=solr_search,solr_index_document
 ```
 
-This is opt-in because listing tools requires talking to the server. Tool names may carry a
-per-connection prefix from Spring AI's `McpToolNamePrefixGenerator`, so the failure message reports
-the names the server actually exposes — configure the property with those, rather than guessing the
-prefixed form.
+Tool names may carry a per-connection prefix from Spring AI's `McpToolNamePrefixGenerator`, so the
+failure reports the names the server actually exposes — configure the property with those rather
+than guessing the prefixed form.
+
+Verification is skipped when `spring.ai.mcp.client.initialized` is false, since clients told not to
+connect have nothing to list.
 
 A conversation id is a routing key, not a secret: any caller that knows one can continue it.
 

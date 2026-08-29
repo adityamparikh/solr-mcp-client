@@ -18,18 +18,21 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
- * Fails startup when the connected MCP server does not expose the tools this assistant needs.
+ * Fails startup unless the Solr MCP server actually offers tools to call.
  *
- * <p>{@link McpConnectionVerifier} proves a connection is <em>configured</em>; it cannot tell that
- * the process on the other end is the Solr MCP server. A stale {@code SOLR_MCP_JAR} or an
- * {@code SOLR_MCP_HTTP_URL} pointing at some other MCP server starts cleanly and then fails only as
- * unhelpful model answers, because the assistant simply has no Solr tools to call.
+ * <p>Listing the tools answers every question worth asking at startup in one step. An empty list
+ * means either that no MCP connection is configured at all, or that the connected process is not
+ * the Apache Solr MCP server — a stale {@code SOLR_MCP_JAR}, or a {@code SOLR_MCP_HTTP_URL} pointing
+ * somewhere else. Both otherwise produce a healthy-looking application that fails only as unhelpful
+ * model answers, because the assistant has nothing to call.
  *
- * <p>Verification is opt-in through {@code solr.mcp.client.expected-tools}: listing tools requires
- * talking to the server, and an application that has no opinion about which tools it needs should
- * not pay for that at startup. Tool names may carry a per-connection prefix from Spring AI's
- * {@code McpToolNamePrefixGenerator}, so the failure reports the names the server actually exposes
+ * <p>{@code solr.mcp.client.expected-tools} narrows this further, naming tools this deployment
+ * depends on. Tool names may carry a per-connection prefix from Spring AI's
+ * {@code McpToolNamePrefixGenerator}, so a failure reports the names the server actually exposes
  * rather than leaving an operator to guess the prefixed form.
+ *
+ * <p>Verification is skipped when {@code spring.ai.mcp.client.initialized} is false: the clients
+ * have been told not to connect, so there is nothing to list and nothing to conclude from silence.
  */
 @Component
 class McpToolVerifier implements InitializingBean {
@@ -38,22 +41,35 @@ class McpToolVerifier implements InitializingBean {
 
     private final ObjectProvider<ToolCallbackProvider> toolCallbacks;
     private final Set<String> expectedTools;
+    private final boolean clientsInitialized;
 
-    // Split explicitly rather than binding straight to a collection: @Value collection conversion
-    // depends on Boot's ApplicationConversionService being present, so it silently yields a single
-    // element in contexts that lack it.
+    // expected-tools is split explicitly rather than bound straight to a collection: @Value
+    // collection conversion depends on Boot's ApplicationConversionService being present, so it
+    // silently yields a single element in contexts that lack it.
     McpToolVerifier(ObjectProvider<ToolCallbackProvider> toolCallbacks,
-                    @Value("${solr.mcp.client.expected-tools:}") String expectedTools) {
+                    @Value("${solr.mcp.client.expected-tools:}") String expectedTools,
+                    @Value("${spring.ai.mcp.client.initialized:true}") boolean clientsInitialized) {
         this.toolCallbacks = toolCallbacks;
         this.expectedTools = StringUtils.commaDelimitedListToSet(expectedTools);
+        this.clientsInitialized = clientsInitialized;
     }
 
     @Override
     public void afterPropertiesSet() {
-        if (expectedTools.isEmpty()) {
+        if (!clientsInitialized) {
+            log.info("MCP clients are not initialized; skipping Solr MCP tool verification");
             return;
         }
+
         SortedSet<String> available = availableToolNames();
+        if (available.isEmpty()) {
+            throw new IllegalStateException("""
+                    The Solr MCP server offers no tools, so the assistant has nothing to call. \
+                    Either no MCP connection is configured — activate the 'mcp-stdio' profile (the \
+                    default) or 'mcp-http' — or the connected process is not the Apache Solr MCP \
+                    server.""");
+        }
+
         SortedSet<String> missing = new TreeSet<>(expectedTools);
         missing.removeAll(available);
         if (!missing.isEmpty()) {
@@ -64,7 +80,8 @@ class McpToolVerifier implements InitializingBean {
                     solr.mcp.client.expected-tools with the names listed here."""
                     .formatted(missing, available));
         }
-        log.info("Solr MCP server exposes all {} expected tools", expectedTools.size());
+
+        log.info("Solr MCP server exposes {} tools: {}", available.size(), available);
     }
 
     private SortedSet<String> availableToolNames() {

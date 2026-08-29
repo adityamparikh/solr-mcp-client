@@ -77,9 +77,10 @@ shared `config` or `service` package.
 - `OPENAI_API_KEY`, `SOLR_MCP_OAUTH_CLIENT_SECRET` and other secrets belong in environment
   variables, never in committed configuration. Properties that must be set have no default so that
   misconfiguration fails at startup rather than on the first request.
-- `McpConnectionVerifier` fails startup when no MCP connection is configured. `McpToolVerifier`
-  additionally fails when `solr.mcp.client.expected-tools` names a tool the server does not expose;
-  it is opt-in because listing tools requires contacting the server.
+- `McpToolVerifier` fails startup unless the Solr MCP server offers tools. Listing them answers
+  "is a connection configured" and "is this the right server" in one step, so do not add a separate
+  connection check. It skips when `spring.ai.mcp.client.initialized` is false, since disabled
+  clients have nothing to list.
 - Never bind a comma-separated property straight to a `List`/`Set` with `@Value`. That conversion
   needs Boot's `ApplicationConversionService`, so it silently yields one element in contexts that
   lack it (a bare `ApplicationContextRunner`, for one). Bind a `String` and split it with

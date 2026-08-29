@@ -4,8 +4,8 @@ spring:
   profiles:
     # Profiles select how this client REACHES the Solr MCP server, not how it serves its own API:
     # this application is a REST service in every profile. mcp-stdio is the default; activating any
-    # profile explicitly replaces it, so McpConnectionVerifier fails fast rather than starting with
-    # zero Solr MCP connections.
+    # profile explicitly replaces it, so McpToolVerifier fails fast rather than starting with zero
+    # Solr MCP tools.
     default: mcp-stdio
   ai:
     openai:

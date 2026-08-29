@@ -5,8 +5,6 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -15,22 +13,47 @@ import static org.mockito.Mockito.mock;
 
 class McpToolVerifierTest {
 
-    private static final ToolCallbackProvider SOLR_TOOLS =
-            provider("solr_search", "solr_index_document");
-
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(McpToolVerifier.class);
 
     @Test
-    void startsWhenEveryExpectedToolIsExposed() {
-        runner.withBean(ToolCallbackProvider.class, () -> SOLR_TOOLS)
+    void startsWhenTheServerOffersTools() {
+        runner.withBean(ToolCallbackProvider.class, () -> provider("solr_search"))
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void failsWhenTheServerOffersNoTools() {
+        // Covers both "no connection configured" and "connected to the wrong server": either way
+        // the assistant has nothing to call.
+        runner.withBean(ToolCallbackProvider.class, () -> provider())
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure()
+                        .rootCause()
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("offers no tools")
+                        .hasMessageContaining("mcp-stdio"));
+    }
+
+    @Test
+    void failsWhenThereIsNoToolProviderAtAll() {
+        runner.run(context -> assertThat(context).hasFailed()
+                .getFailure()
+                .rootCause()
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("offers no tools"));
+    }
+
+    @Test
+    void startsWhenEveryExpectedToolIsPresent() {
+        runner.withBean(ToolCallbackProvider.class, () -> provider("solr_search", "solr_index_document"))
                 .withPropertyValues("solr.mcp.client.expected-tools=solr_search,solr_index_document")
                 .run(context -> assertThat(context).hasNotFailed());
     }
 
     @Test
-    void failsFastNamingTheMissingToolsAndTheOnesActuallyExposed() {
-        runner.withBean(ToolCallbackProvider.class, () -> SOLR_TOOLS)
+    void failsNamingTheMissingToolsAndTheOnesActuallyExposed() {
+        runner.withBean(ToolCallbackProvider.class, () -> provider("solr_search"))
                 .withPropertyValues("solr.mcp.client.expected-tools=solr_search,solr_delete_collection")
                 .run(context -> assertThat(context).hasFailed()
                         .getFailure()
@@ -42,43 +65,17 @@ class McpToolVerifierTest {
     }
 
     @Test
-    void failsWhenTheServerExposesNoToolsAtAll() {
-        runner.withBean(ToolCallbackProvider.class, () -> provider())
-                .withPropertyValues("solr.mcp.client.expected-tools=solr_search")
-                .run(context -> assertThat(context).hasFailed()
-                        .getFailure()
-                        .rootCause()
-                        .isInstanceOf(IllegalStateException.class));
-    }
-
-    @Test
-    void neverContactsTheServerWhenNoToolsAreExpected() {
+    void staysQuietWhenTheClientsWereToldNotToInitialize() {
         ToolCallbackProvider untouched = mock(ToolCallbackProvider.class);
 
-        runner.withBean(ToolCallbackProvider.class, () -> untouched).run(context -> {
-            assertThat(context).hasNotFailed();
-            // Listing tools requires talking to the server; an application with no expectation
-            // must not pay for that at startup.
-            then(untouched).shouldHaveNoInteractions();
-        });
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class NoProvider {
-        @Bean
-        String placeholder() {
-            return "";
-        }
-    }
-
-    @Test
-    void failsWhenNoToolProviderExistsAtAll() {
-        runner.withUserConfiguration(NoProvider.class)
-                .withPropertyValues("solr.mcp.client.expected-tools=solr_search")
-                .run(context -> assertThat(context).hasFailed()
-                        .getFailure()
-                        .rootCause()
-                        .isInstanceOf(IllegalStateException.class));
+        // Listing tools requires a live connection. With initialization disabled there is nothing
+        // to list, so silence proves nothing and must not be read as failure.
+        runner.withBean(ToolCallbackProvider.class, () -> untouched)
+                .withPropertyValues("spring.ai.mcp.client.initialized=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    then(untouched).shouldHaveNoInteractions();
+                });
     }
 
     private static ToolCallbackProvider provider(String... names) {
