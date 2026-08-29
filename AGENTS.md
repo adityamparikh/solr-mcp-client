@@ -29,6 +29,9 @@ grab-bag and no layer packages.
   CLI) injects `SolrAssistant` directly instead of calling the application's own HTTP endpoints.
 - `mcp`: everything about reaching the Solr MCP server — the outbound OAuth2 service token for the
   `mcp-http` profile and the startup check that a connection is configured at all.
+- `model`: which chat model provider is active, decided from the API keys in the environment before
+  Spring AI's provider auto-configurations are evaluated. Knows nothing of Solr, MCP or the web
+  layer.
 - `web`: the REST service this application *is* — controller, RFC 9457 error mapping, inbound
   security posture, OpenAPI. Transport only; no business logic.
 
@@ -44,6 +47,12 @@ shared `config` or `service` package.
 - **Never use `@ConditionalOnBean` in application configuration.** It is evaluated before
   auto-configurations register their beans, so it silently never matches. Three defects in this
   codebase came from exactly that; `McpHttpTransportWiringTest` guards against a regression.
+- **Keep application code model-agnostic.** Depend on `ChatClient` / `ChatClient.Builder`, never on
+  a provider type such as `OpenAiChatModel` or `AnthropicChatModel`, and never inject a provider by
+  `@Qualifier`. Provider names belong only in `ChatModelProviderSelector`'s API-key map and in
+  per-provider model defaults in `application.yml`; adding a provider must not touch anything else.
+- Never set `spring.ai.chat.client.enabled=false`. It removes the auto-configured builder along with
+  Spring AI's `ChatClientBuilderConfigurer` — observation wiring and the tool-calling advisor.
 - Build the chat client from the auto-configured `ChatClient.Builder`; building from a `ChatModel`
   bypasses Spring AI's own builder configurer. Configure that builder directly — it is
   `@Scope("prototype")`, so each injection point gets its own. Do not use a
@@ -74,7 +83,10 @@ shared `config` or `service` package.
   profile, unrelated to ours), not `PROFILES`.
 - `mcp-http` connects over Streamable HTTP with OAuth2 client credentials. It must use a dedicated
   service token — never forward a REST caller's token.
-- `OPENAI_API_KEY`, `SOLR_MCP_OAUTH_CLIENT_SECRET` and other secrets belong in environment
+- Exactly one model provider key may be set unless `spring.ai.model.chat` names the provider;
+  otherwise startup fails rather than guessing. Web slice tests pin `spring.ai.model.chat` so they
+  do not depend on which keys a developer exported.
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SOLR_MCP_OAUTH_CLIENT_SECRET` and other secrets belong in environment
   variables, never in committed configuration. Properties that must be set have no default so that
   misconfiguration fails at startup rather than on the first request.
 - `McpToolVerifier` fails startup unless the Solr MCP server offers tools. Listing them answers

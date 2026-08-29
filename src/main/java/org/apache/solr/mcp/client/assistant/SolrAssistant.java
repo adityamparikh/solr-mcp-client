@@ -37,8 +37,8 @@ public class SolrAssistant {
     }
 
     /**
-     * Drops the retained turns for a conversation. Chat memory is held in process and is never
-     * evicted on its own, so callers must release conversations they are finished with.
+     * Drops the retained turns for a conversation. Chat memory is held in process and never evicted
+     * on its own, so callers must release conversations they are finished with.
      */
     public void forget(String conversationId) {
         chatMemory.clear(conversationId);

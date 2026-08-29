@@ -2,17 +2,13 @@ package org.apache.solr.mcp.client.web;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -50,10 +46,7 @@ public class SolrAssistantController {
 
     public static final String CONVERSATION_ID_HEADER = "X-AI-Conversation-Id";
 
-    /**
-     * Resolved from the {version} path segment by Spring's ApiVersionStrategy rather than matched
-     * literally, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach this version.
-     */
+    /** Matched semantically, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach it. */
     static final String V1 = "1.0";
 
     static final int MAX_MESSAGE_LENGTH = 8_000;
@@ -72,18 +65,12 @@ public class SolrAssistantController {
                     + "are retained per conversation and replayed on later requests that carry the "
                     + "same X-AI-Conversation-Id. The id used is returned in that header; omit it "
                     + "on the request to start a new conversation.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "The assistant's answer"),
-            @ApiResponse(responseCode = "400", description = "The request failed validation",
-                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
-            @ApiResponse(responseCode = "502", description = "The chat model or Solr MCP server rejected the request",
-                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
-            @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time",
-                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))})
+    @ApiResponse(responseCode = "200", description = "The assistant's answer")
+    @ApiResponse(responseCode = "400", description = "The request failed validation")
+    @ApiResponse(responseCode = "502", description = "The chat model or Solr MCP server rejected the request")
+    @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time")
     ResponseEntity<ChatReply> chat(
-            @Parameter(description = "Conversation to continue. Omit to start a new one; the id "
-                    + "used is always returned in this same response header.",
-                    example = "user-7:session-4")
+            @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, required = false)
             @Size(max = MAX_CONVERSATION_ID_LENGTH, message = "conversationId is too long")
             String conversationId,
@@ -104,10 +91,8 @@ public class SolrAssistantController {
             description = "Drops the retained turns for a conversation. Chat memory is held in "
                     + "process and is never evicted on its own, so long-lived deployments should "
                     + "release conversations when a session ends.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "The conversation was released"),
-            @ApiResponse(responseCode = "400", description = "The conversation id failed validation",
-                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))})
+    @ApiResponse(responseCode = "204", description = "The conversation was released")
+    @ApiResponse(responseCode = "400", description = "The conversation id failed validation")
     ResponseEntity<Void> forget(@PathVariable
                                 @NotBlank(message = "conversationId must not be blank")
                                 @Size(max = MAX_CONVERSATION_ID_LENGTH, message = "conversationId is too long")
@@ -116,18 +101,12 @@ public class SolrAssistantController {
         return ResponseEntity.noContent().build();
     }
 
-    @Schema(description = "A question for the Solr assistant")
     public record ChatRequest(
-            @Schema(description = "The natural-language request",
-                    example = "How many documents are in the books collection?")
             @NotBlank(message = "message must not be blank")
             @Size(max = MAX_MESSAGE_LENGTH, message = "message is too long")
             String message) {
     }
 
-    @Schema(description = "The assistant's answer")
-    public record ChatReply(
-            @Schema(description = "The model's response text")
-            String content) {
+    public record ChatReply(String content) {
     }
 }
