@@ -1,0 +1,21 @@
+spring:
+  ai:
+    mcp:
+      client:
+        streamable-http:
+          connections:
+            solr-mcp:
+              url: ${SOLR_MCP_HTTP_URL}
+              endpoint: ${SOLR_MCP_HTTP_ENDPOINT:/mcp}
+  security:
+    oauth2:
+      client:
+        registration:
+          solr-mcp:
+            authorization-grant-type: client_credentials
+            client-id: ${SOLR_MCP_OAUTH_CLIENT_ID}
+            client-secret: ${SOLR_MCP_OAUTH_CLIENT_SECRET}
+            scope: ${SOLR_MCP_OAUTH_SCOPES:}
+        provider:
+          solr-mcp:
+            token-uri: ${SOLR_MCP_OAUTH_TOKEN_URI}

@@ -1,0 +1,24 @@
+spring:
+  ai:
+    mcp:
+      client:
+        stdio:
+          connections:
+            solr-mcp:
+              # In this profile the client is also the server's launcher, so it owns the child
+              # process spec. Absolute paths only: the child is launched relative to this process's
+              # working directory, which differs between `bootRun` and `java -jar`.
+              command: ${SOLR_MCP_COMMAND:java}
+              args:
+                - -jar
+                - ${SOLR_MCP_JAR}
+              # These are the SERVER's settings, not this client's. They must be declared here
+              # because the MCP SDK does not pass the parent environment through: it inherits only
+              # an allowlist (PATH, HOME, HOMEDRIVE, HOMEPATH, USERNAME), so a SOLR_URL exported in
+              # the operator's shell would silently never reach the child.
+              # In the mcp-http profile these are absent by design — a remote server owns its own config.
+              env:
+                SOLR_URL: ${SOLR_URL:http://localhost:8983/solr/}
+                # The SERVER's profile, in the server's own naming — unrelated to this
+                # application's mcp-stdio / mcp-http profiles.
+                SPRING_PROFILES_ACTIVE: stdio
