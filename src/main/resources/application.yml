@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: solr-mcp-client
+  profiles:
+    # Profiles select how this client REACHES the Solr MCP server, not how it serves its own API:
+    # this application is a REST service in every profile. mcp-stdio is the default; activating any
+    # profile explicitly replaces it, so McpToolVerifier fails fast rather than starting with zero
+    # Solr MCP tools.
+    default: mcp-stdio
+  ai:
+    openai:
+      # Deliberately no default: an unset key must fail at startup, not on the first chat request.
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        model: ${OPENAI_MODEL:gpt-5-mini}
+    mcp:
+      client:
+        name: solr-mcp-client
+        version: 0.0.1-SNAPSHOT
+        type: SYNC
+        initialized: true
+        request-timeout: 60s
+
+  mvc:
+    apiversion:
+      # Framework-owned API versioning (Spring Framework 7). The version is the second path
+      # segment, so /api/v1/chat keeps its shape while the version becomes a first-class mapping
+      # dimension: an unsupported version is rejected with 400 naming the version, rather than
+      # falling through to a 404 that looks like a wrong URL.
+      #
+      # The version is required rather than defaulted. `spring.mvc.apiversion.default` would be
+      # dead config here: it fires only when the resolver returns null, and a path-segment resolver
+      # always returns whatever sits at the index. Spring also refuses to start with `required: true`
+      # and a default configured together.
+      use:
+        path-segment: 1
+      required: true
+      detect-supported: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method

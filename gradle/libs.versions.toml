@@ -1,0 +1,29 @@
+[versions]
+spring-boot = "4.1.1"
+spring-dependency-management = "1.1.7"
+cyclonedx = "3.4.1"
+sonarqube = "7.4.0.8496"
+jacoco = "0.8.15"
+spring-ai = "2.0.1"
+springdoc = "3.1.0"
+
+[libraries]
+spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
+spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+spring-boot-oauth2-client = { module = "org.springframework.boot:spring-boot-starter-oauth2-client" }
+springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+spring-ai-mcp-client = { module = "org.springframework.ai:spring-ai-starter-mcp-client" }
+spring-ai-openai = { module = "org.springframework.ai:spring-ai-starter-model-openai" }
+spring-boot-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }
+spring-boot-opentelemetry-test = { module = "org.springframework.boot:spring-boot-starter-opentelemetry-test" }
+spring-boot-webmvc-test = { module = "org.springframework.boot:spring-boot-starter-webmvc-test" }
+spring-security-test = { module = "org.springframework.security:spring-security-test" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
+cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }
+sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }
