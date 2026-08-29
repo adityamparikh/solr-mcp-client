@@ -12,8 +12,7 @@ spring:
       # Deliberately no default: an unset key must fail at startup, not on the first chat request.
       api-key: ${OPENAI_API_KEY}
       chat:
-        options:
-          model: ${OPENAI_MODEL:gpt-5-mini}
+        model: ${OPENAI_MODEL:gpt-5-mini}
     mcp:
       client:
         name: solr-mcp-client
