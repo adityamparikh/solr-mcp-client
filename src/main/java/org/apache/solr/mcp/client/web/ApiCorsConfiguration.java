@@ -4,9 +4,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.util.List;
+import java.util.Set;
 
 /**
  * Cross-origin access for the REST API.
@@ -26,10 +27,13 @@ import java.util.List;
 @Configuration(proxyBeanMethods = false)
 class ApiCorsConfiguration implements WebMvcConfigurer {
 
-    private final List<String> allowedOrigins;
+    private final Set<String> allowedOrigins;
 
-    ApiCorsConfiguration(@Value("${solr.mcp.client.cors.allowed-origins:}") List<String> allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
+    // Split explicitly rather than binding straight to a collection: @Value collection conversion
+    // depends on Boot's ApplicationConversionService being present, so it silently yields a single
+    // element in contexts that lack it.
+    ApiCorsConfiguration(@Value("${solr.mcp.client.cors.allowed-origins:}") String allowedOrigins) {
+        this.allowedOrigins = StringUtils.commaDelimitedListToSet(allowedOrigins);
     }
 
     @Override

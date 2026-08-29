@@ -77,7 +77,13 @@ shared `config` or `service` package.
 - `OPENAI_API_KEY`, `SOLR_MCP_OAUTH_CLIENT_SECRET` and other secrets belong in environment
   variables, never in committed configuration. Properties that must be set have no default so that
   misconfiguration fails at startup rather than on the first request.
-- `McpConnectionVerifier` fails startup when no MCP connection is configured.
+- `McpConnectionVerifier` fails startup when no MCP connection is configured. `McpToolVerifier`
+  additionally fails when `solr.mcp.client.expected-tools` names a tool the server does not expose;
+  it is opt-in because listing tools requires contacting the server.
+- Never bind a comma-separated property straight to a `List`/`Set` with `@Value`. That conversion
+  needs Boot's `ApplicationConversionService`, so it silently yields one element in contexts that
+  lack it (a bare `ApplicationContextRunner`, for one). Bind a `String` and split it with
+  `StringUtils.commaDelimitedListToSet`.
 - The REST façade performs **no inbound authentication** by design. Do not add one without asking;
   do not advertise a security scheme in OpenAPI that is not enforced.
 - Conversation id travels in the `X-AI-Conversation-Id` header in both directions and is not

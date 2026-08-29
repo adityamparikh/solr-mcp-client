@@ -11,6 +11,9 @@
  *       authenticated with a dedicated OAuth2 client-credentials service token.</li>
  * </ul>
  *
+ * <p>Two startup checks guard the dependency: one that a connection is configured at all, and an
+ * opt-in one that the connected server exposes the tools this deployment names.
+ *
  * <p>The inbound REST facade is {@link org.apache.solr.mcp.client.web}. These packages are
  * independent: swapping the transport changes nothing in {@code web}, and replacing the REST facade
  * with an in-process UI changes nothing here.

@@ -54,6 +54,28 @@ class ApiCorsConfigurationTest {
     }
 
     @Nested
+    @WebMvcTest(controllers = SolrAssistantController.class,
+            properties = "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN + ",https://admin.example.com")
+    class WhenSeveralOriginsAreAllowed {
+
+        @Autowired MockMvc mockMvc;
+        @MockitoBean SolrAssistant assistant;
+
+        @Test
+        void admitsEachOfThem() throws Exception {
+            given(assistant.ask(anyString(), anyString())).willReturn("ok");
+
+            // A comma-separated value must become several origins, not one nonsensical origin.
+            for (String origin : new String[]{UI_ORIGIN, "https://admin.example.com"}) {
+                mockMvc.perform(post("/api/v1/chat").header(HttpHeaders.ORIGIN, origin)
+                                .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                        .andExpect(status().isOk())
+                        .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin));
+            }
+        }
+    }
+
+    @Nested
     @WebMvcTest(controllers = SolrAssistantController.class)
     class WhenNoOriginIsConfigured {
 
