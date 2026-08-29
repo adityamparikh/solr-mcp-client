@@ -25,7 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = SolrAssistantController.class)
+// spring.ai.model.chat is pinned so the slice does not depend on which model API keys a
+// developer happens to have exported.
+@WebMvcTest(controllers = SolrAssistantController.class, properties = "spring.ai.model.chat=none")
 class SolrAssistantControllerTest {
 
     private static final String VALID_BODY = """

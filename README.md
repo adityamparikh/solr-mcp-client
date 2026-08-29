@@ -15,7 +15,7 @@ which is why both are prefixed `mcp-`:
 ## Requirements
 
 - Java 25
-- `OPENAI_API_KEY` — required; the application fails at startup without it
+- An API key for one chat model provider — `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
 - A built Solr MCP server for the default `mcp-stdio` profile
 
 ## Run with mcp-stdio (default)
@@ -24,7 +24,7 @@ which is why both are prefixed `mcp-`:
 this process's working directory, which differs between `bootRun` and `java -jar`.
 
 ```bash
-export OPENAI_API_KEY=...
+export OPENAI_API_KEY=...          # or ANTHROPIC_API_KEY
 export SOLR_MCP_JAR=/absolute/path/to/solr-mcp.jar
 export SOLR_URL=http://localhost:8983/solr/
 ./gradlew bootRun
@@ -56,7 +56,7 @@ The `mcp-http` profile obtains a dedicated OAuth2 client-credentials token and a
 outbound MCP request. It never forwards an API caller's token.
 
 ```bash
-export OPENAI_API_KEY=...
+export OPENAI_API_KEY=...          # or ANTHROPIC_API_KEY
 export SOLR_MCP_HTTP_URL=https://solr-mcp.example.com
 export SOLR_MCP_OAUTH_TOKEN_URI=https://idp.example.com/oauth/token
 export SOLR_MCP_OAUTH_CLIENT_ID=...
@@ -71,6 +71,43 @@ server's OAuth2 resource server requires.
 The token is fetched with `AuthorizedClientServiceOAuth2AuthorizedClientManager`, not the
 request-scoped default: the MCP client also talks to the server outside any HTTP request (during
 client initialization at startup), where the request-bound manager cannot produce a token.
+
+## Choosing a model provider
+
+Both the OpenAI and Anthropic starters are on the classpath. Which one drives the assistant is
+decided from the API keys present in the environment:
+
+| Environment | Result |
+| --- | --- |
+| `OPENAI_API_KEY` only | OpenAI |
+| `ANTHROPIC_API_KEY` only | Anthropic |
+| Both, no explicit choice | **Startup fails**, naming both providers and the property that settles it |
+| Neither | No provider is activated; startup fails where a chat model is first needed |
+| `spring.ai.model.chat` set | Always respected, whatever keys are present |
+
+Refusing to guess between two configured providers follows
+[Embabel](https://github.com/embabel/embabel-agent), which likewise declines to infer a default and
+requires the model to be named. Picking by precedence would silently decide which account is billed
+and how the assistant behaves, and neither is visible from outside.
+
+To run with both keys exported, name the provider:
+
+```bash
+export SPRING_AI_MODEL_CHAT=anthropic
+```
+
+Model names default per provider and are overridable with `OPENAI_MODEL` / `ANTHROPIC_MODEL`.
+
+### Staying model-agnostic
+
+No application code names a provider. `SolrAssistant` depends on `ChatClient`, and
+`ChatClientConfiguration` on the auto-configured `ChatClient.Builder` — no provider-specific
+`ChatModel` type is imported anywhere in `src/main/java`. Provider names appear only in
+`ChatModelProviderSelector`'s map of provider to API-key variable, and as per-provider model
+defaults in `application.yml`.
+
+Adding a third provider is a starter dependency, one entry in that map, and one default model name.
+No application code changes.
 
 ## REST API
 

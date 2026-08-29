@@ -17,6 +17,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+// spring.ai.model.chat is pinned throughout so these slices do not depend on which model API
+// keys a developer happens to have exported.
 class ApiCorsConfigurationTest {
 
     private static final String UI_ORIGIN = "https://solr-ui.example.com";
@@ -25,7 +27,7 @@ class ApiCorsConfigurationTest {
 
     @Nested
     @WebMvcTest(controllers = SolrAssistantController.class,
-            properties = "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN)
+            properties = {"spring.ai.model.chat=none", "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN})
     class WhenAnOriginIsAllowed {
 
         @Autowired MockMvc mockMvc;
@@ -55,7 +57,8 @@ class ApiCorsConfigurationTest {
 
     @Nested
     @WebMvcTest(controllers = SolrAssistantController.class,
-            properties = "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN + ",https://admin.example.com")
+            properties = {"spring.ai.model.chat=none",
+                    "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN + ",https://admin.example.com"})
     class WhenSeveralOriginsAreAllowed {
 
         @Autowired MockMvc mockMvc;
@@ -76,7 +79,7 @@ class ApiCorsConfigurationTest {
     }
 
     @Nested
-    @WebMvcTest(controllers = SolrAssistantController.class)
+    @WebMvcTest(controllers = SolrAssistantController.class, properties = "spring.ai.model.chat=none")
     class WhenNoOriginIsConfigured {
 
         @Autowired MockMvc mockMvc;

@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.springdoc.openapi.webmvc.ui)
     implementation(libs.spring.ai.mcp.client)
     implementation(libs.spring.ai.openai)
+    implementation(libs.spring.ai.anthropic)
 
     testImplementation(libs.spring.boot.actuator.test)
     testImplementation(libs.spring.boot.opentelemetry.test)

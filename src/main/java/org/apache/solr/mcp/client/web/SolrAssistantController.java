@@ -80,7 +80,7 @@ public class SolrAssistantController {
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))})
-    ResponseEntity<ChatReply> chat(
+    ResponseEntity<ChatResponse> chat(
             @Parameter(description = "Conversation to continue. Omit to start a new one; the id "
                     + "used is always returned in this same response header.",
                     example = "user-7:session-4")
@@ -96,7 +96,7 @@ public class SolrAssistantController {
 
         return ResponseEntity.ok()
                 .header(CONVERSATION_ID_HEADER, conversation)
-                .body(new ChatReply(answer));
+                .body(new ChatResponse(answer));
     }
 
     @DeleteMapping(path = "/chat/{conversationId}", version = V1)
@@ -126,7 +126,7 @@ public class SolrAssistantController {
     }
 
     @Schema(description = "The assistant's answer")
-    public record ChatReply(
+    public record ChatResponse(
             @Schema(description = "The model's response text")
             String content) {
     }
