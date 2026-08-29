@@ -75,8 +75,10 @@ public class ChatModelProviderSelector implements EnvironmentPostProcessor {
         } else {
             String provider = available.getFirst();
             selection.put(PROVIDER_PROPERTY, provider);
-            apiKeyProperty(environment, provider).ifPresent(key ->
-                    selection.put(springAiApiKeyProperty(provider), key));
+            if (!StringUtils.hasText(environment.getProperty(springAiApiKeyProperty(provider)))) {
+                selection.put(springAiApiKeyProperty(provider),
+                        environment.getProperty(API_KEY_VARIABLES.get(provider)));
+            }
         }
         // addLast: an explicitly configured spring.ai.<provider>.api-key must keep precedence over
         // the environment variable, so that a test cannot be handed a real key by accident.
@@ -86,14 +88,6 @@ public class ChatModelProviderSelector implements EnvironmentPostProcessor {
     private static boolean hasApiKey(ConfigurableEnvironment environment, String provider) {
         return StringUtils.hasText(environment.getProperty(springAiApiKeyProperty(provider)))
                 || StringUtils.hasText(environment.getProperty(API_KEY_VARIABLES.get(provider)));
-    }
-
-    private static java.util.Optional<String> apiKeyProperty(ConfigurableEnvironment environment, String provider) {
-        if (StringUtils.hasText(environment.getProperty(springAiApiKeyProperty(provider)))) {
-            return java.util.Optional.empty();
-        }
-        return java.util.Optional.ofNullable(environment.getProperty(API_KEY_VARIABLES.get(provider)))
-                .filter(StringUtils::hasText);
     }
 
     private static String springAiApiKeyProperty(String provider) {
