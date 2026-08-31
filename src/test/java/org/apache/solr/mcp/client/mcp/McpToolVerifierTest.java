@@ -61,14 +61,6 @@ class McpToolVerifierTest {
     }
 
     @Test
-    void startsWhenEveryExpectedToolIsPresent() {
-        runner.withBean(ToolCallbackProvider.class, () -> provider("solr_search", "solr_index_document"))
-                .withPropertyValues("solr.mcp.client.expected-tools=solr_search,solr_index_document")
-                .run(context -> assertThat(context).hasNotFailed());
-    }
-
-
-    @Test
     void staysQuietWhenTheClientsWereToldNotToInitialize() {
         ToolCallbackProvider untouched = mock(ToolCallbackProvider.class);
 

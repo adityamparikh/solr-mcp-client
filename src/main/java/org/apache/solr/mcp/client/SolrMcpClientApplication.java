@@ -36,10 +36,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class SolrMcpClientApplication {
 
-    /** Instantiated by Spring as a configuration class, not by application code. */
-    public SolrMcpClientApplication() {
-    }
-
     /**
      * Starts the application. No profile is activated here: {@code spring.profiles.default} settles
      * that, so an operator can override the MCP transport without a code change.

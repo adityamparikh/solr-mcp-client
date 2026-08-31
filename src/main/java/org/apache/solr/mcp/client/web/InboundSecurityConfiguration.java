@@ -41,7 +41,7 @@ import org.springframework.security.web.SecurityFilterChain;
 class InboundSecurityConfiguration {
 
     @Bean
-    SecurityFilterChain inboundSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain inboundSecurityFilterChain(HttpSecurity http) {
         return http
                 // Stateless JSON API with no browser-managed session or cookie credentials.
                 .csrf(AbstractHttpConfigurer::disable)

@@ -41,12 +41,14 @@ spring:
     # unresolvable placeholder breaks every test that starts a context whenever the var is absent,
     # including contexts that never build a ChatModel at all.
     #
-    # Surprising consequence, worth knowing before you authenticate some other way: with the var
-    # absent the placeholder binds "" rather than null. AnthropicChatAutoConfiguration guards the
-    # key with a null check, not a blank check, so "" is applied as a real key — which SUPPRESSES
-    # AnthropicSetup.detectApiKey()'s own fallback chain (ANTHROPIC_API_KEY, then
-    # ANTHROPIC_AUTH_TOKEN). Anyone authenticating with ANTHROPIC_AUTH_TOKEN must therefore set
-    # spring.ai.anthropic.api-key explicitly; exporting the token alone will no longer be picked up.
+    # The Anthropic placeholder falls back through ANTHROPIC_AUTH_TOKEN before defaulting to empty,
+    # and that nesting is load-bearing rather than decorative. With the var absent the placeholder
+    # binds "" rather than null, and AnthropicChatAutoConfiguration guards the key with a null
+    # check rather than a blank one — so "" is applied as a real key and SUPPRESSES
+    # AnthropicSetup.detectApiKey()'s own chain (ANTHROPIC_API_KEY, then ANTHROPIC_AUTH_TOKEN).
+    # Reading the token here keeps that second variable working. Collapsing this to
+    # ${ANTHROPIC_API_KEY:} would silently break anyone who authenticates with the token instead.
+    # When neither var is set, "" suppresses nothing, because there was nothing to fall back to.
     #
     # If a second starter is ever added, spring.ai.model.chat must name the winner or startup fails
     # rather than guessing. Web slice tests pin it to `none` so they do not depend on which keys a
@@ -56,7 +58,7 @@ spring:
         model: ${OPENAI_MODEL:gpt-5-mini}
         api-key: ${OPENAI_API_KEY:}
     anthropic:
-      api-key: ${ANTHROPIC_API_KEY:}
+      api-key: ${ANTHROPIC_API_KEY:${ANTHROPIC_AUTH_TOKEN:}}
       chat:
         model: ${ANTHROPIC_MODEL:claude-sonnet-5}
     mcp:
