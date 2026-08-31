@@ -88,13 +88,6 @@ public class SolrAssistantController {
 
     private final SolrAssistant assistant;
 
-    /**
-     * Constructor injection keeps the single collaborator visible and the controller trivially
-     * instantiable in a slice test.
-     *
-     * @param assistant the only collaborator; this facade adds transport concerns and nothing else,
-     *                  so anything it would need beyond this belongs in the assistant instead
-     */
     public SolrAssistantController(SolrAssistant assistant) {
         this.assistant = assistant;
     }

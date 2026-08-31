@@ -64,7 +64,6 @@ public class SolrAssistant {
      *
      * @param conversationId scopes the retained turns; an id never seen before starts a new
      *                       conversation rather than failing
-     * @param request        the user's turn
      * @return the model's answer, with any tool calls already resolved
      * @throws EmptyAnswerException if the model completed without producing any content, which
      *                              {@code ChatClient} reports as a null body
@@ -103,8 +102,6 @@ public class SolrAssistant {
      * <p>The conversation it belongs to is passed alongside it, never carried in this record: it is
      * ambient session context rather than part of what the user asked. How an adapter transports
      * that id is the adapter's business — the REST facade uses a header.
-     *
-     * @param message the user's turn
      */
     public record ChatRequest(
             @NotBlank(message = "message must not be blank")
@@ -114,8 +111,6 @@ public class SolrAssistant {
     /**
      * The assistant's answer, already resolved: any tool calls the model made against Solr MCP
      * happened before this was built, so the content is final text and never a pending tool call.
-     *
-     * @param content the assistant's answer
      */
     public record ChatReply(String content) {
     }
@@ -130,9 +125,6 @@ public class SolrAssistant {
      */
     public static class EmptyAnswerException extends IllegalStateException {
 
-        /**
-         * @param message describes the conversation whose exchange produced no content
-         */
         public EmptyAnswerException(String message) {
             super(message);
         }
