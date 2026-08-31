@@ -25,7 +25,9 @@
 #     the host is reachable as host.docker.internal. `--add-host` supplies that name on Linux, where
 #     Docker does not define it; on Docker Desktop it is already defined and the flag is harmless.
 #
-# Build the image first — the server publishes no registry image yet:
+# Build the image first — the server publishes no registry image yet (neither GHCR nor Docker Hub
+# as of August 2026; its release workflow will push apache/solr-mcp to Docker Hub with the first
+# official release, at which point SOLR_MCP_IMAGE can name that instead of a local build):
 #   cd <solr-mcp checkout> && ./gradlew jibDockerBuild
 spring:
   ai:

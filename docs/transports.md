@@ -48,8 +48,11 @@ do.
 
 ## `mcp-stdio-docker`
 
-Same stdio transport, container instead of a jar. The server publishes no registry image yet, so
-build one **in your Solr MCP checkout** first:
+Same stdio transport, container instead of a jar. No registry image is published yet — as of
+August 2026 neither GHCR nor Docker Hub has one, though the server's release workflow is set up to
+push `apache/solr-mcp` to Docker Hub with its first official release; once that lands, point
+`SOLR_MCP_IMAGE` at it instead of building. Until then, build the image **in your Solr MCP
+checkout** first:
 
 ```bash
 cd <solr-mcp checkout>
