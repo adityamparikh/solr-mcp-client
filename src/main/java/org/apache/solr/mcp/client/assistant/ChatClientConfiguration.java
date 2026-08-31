@@ -101,6 +101,11 @@ class ChatClientConfiguration {
             explain the impact and ask the user to confirm.
             """;
 
+    /**
+     * The assistant's client: system prompt, memory advisor and Solr MCP tools attached as
+     * defaults so every prompt built from it carries them. The class Javadoc explains why the
+     * injected builder is mutated directly and why no tool-calling advisor appears here.
+     */
     @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,

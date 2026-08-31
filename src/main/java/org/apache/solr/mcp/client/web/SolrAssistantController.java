@@ -89,16 +89,18 @@ public class SolrAssistantController {
     private final SolrAssistant assistant;
 
     /**
-     * Constructor injection keeps the single collaborator visible and the controller trivially
-     * instantiable in a slice test.
-     *
-     * @param assistant the only collaborator; this facade adds transport concerns and nothing else,
-     *                  so anything it would need beyond this belongs in the assistant instead
+     * @param assistant the only collaborator; this facade adds transport concerns and nothing
+     *                  else, so anything it would need beyond this belongs in the assistant
      */
     public SolrAssistantController(SolrAssistant assistant) {
         this.assistant = assistant;
     }
 
+    /**
+     * Answers one conversational turn. The conversation id is echoed unconditionally — for a
+     * caller that omitted the header it is the only place the generated id can be learned, and
+     * echoing it always spares clients a "was it present" branch.
+     */
     @PostMapping(path = "/chat", version = V1, consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Ask the Solr assistant a question",
@@ -124,6 +126,10 @@ public class SolrAssistantController {
                 .body(assistant.ask(conversationId, request));
     }
 
+    /**
+     * Releases a conversation's retained turns. Idempotent because
+     * {@link SolrAssistant#forget} accepts unknown ids, so a retried DELETE stays a 204.
+     */
     @DeleteMapping(path = "/chat/{conversationId}", version = V1)
     @Operation(summary = "Forget a conversation",
             description = "Drops the retained turns for a conversation. Chat memory is held in "

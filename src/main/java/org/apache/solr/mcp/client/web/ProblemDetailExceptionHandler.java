@@ -84,6 +84,10 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(exception, invalidBody(exception), headers, status, request);
     }
 
+    /**
+     * Joins the distinct field messages into one detail. Package-visible so the mapping can be
+     * asserted directly, without standing up a web context to raise the exception.
+     */
     static ProblemDetail invalidBody(MethodArgumentNotValidException exception) {
         String detail = exception.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
@@ -105,6 +109,10 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(exception, invalidParameter(exception), headers, status, request);
     }
 
+    /**
+     * The parameter-validation counterpart of {@link #invalidBody}: same joining, reached
+     * through the different result structure this exception carries.
+     */
     static ProblemDetail invalidParameter(HandlerMethodValidationException exception) {
         String detail = exception.getParameterValidationResults().stream()
                 .flatMap(result -> result.getResolvableErrors().stream())
@@ -144,6 +152,10 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
                 "Upstream Request Failed", UPSTREAM_FAILED_TYPE);
     }
 
+    /**
+     * Falls back to a generic detail when every violation lacked a message, so a caller never
+     * receives a 400 with an empty explanation.
+     */
     private static ProblemDetail badRequest(String detail) {
         return problem(HttpStatus.BAD_REQUEST, detail.isEmpty() ? VALIDATION_FALLBACK : detail,
                 "Request Validation Failed", VALIDATION_TYPE);
