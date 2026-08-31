@@ -139,5 +139,22 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     operations-sorter: method
+  # The document's Info block, bound straight into springdoc's OpenAPI model — configuration, not
+  # code, so there is no @Configuration class to maintain for it. The version matches
+  # SolrAssistantController.V1; nothing enforces that, so keep the two in step. No security scheme
+  # is declared anywhere: the facade performs no inbound authentication by design (see
+  # InboundSecurityConfiguration), and advertising one it does not enforce would misrepresent the
+  # contract to generated clients.
+  open-api:
+    info:
+      title: ${spring.application.name}
+      version: v1
+      description: |-
+        REST facade over an Apache Solr MCP server. A chat model reaches Solr through MCP tools; this API exposes that assistant over HTTP so a user interface does not have to embed Spring AI itself.
+
+        The facade is unauthenticated by design and is intended to run inside a trusted boundary. In the `mcp-http` profile, OAuth2 client credentials secure the outbound connection to Solr MCP only.
+      license:
+        name: Apache-2.0
+        url: https://www.apache.org/licenses/LICENSE-2.0
 server:
   port: 9090
