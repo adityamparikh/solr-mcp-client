@@ -101,9 +101,10 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void requiresAVersionInThePath() throws Exception {
-        // The version segment is part of the mapping, so an unversioned URL matches no handler at
-        // all: it is a 404 rather than a 400 about the version.
+    void stillNeedsTheVersionSegmentEvenThoughV1IsTheDefaultVersion() throws Exception {
+        // spring.mvc.apiversion.default makes 1.0 the version for a request that resolves none, but
+        // it cannot make an unversioned URL reach a handler: the segment is part of the mapping
+        // template, so this is a 404 rather than a 400 about the version.
         mockMvc.perform(chat("/api/chat"))
                 .andExpect(status().isNotFound());
 

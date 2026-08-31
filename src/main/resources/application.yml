@@ -33,13 +33,21 @@ spring:
       # dimension: an unsupported version is rejected with 400 naming the version, rather than
       # falling through to a 404 that looks like a wrong URL.
       #
-      # The version is required rather than defaulted. `spring.mvc.apiversion.default` would be
-      # dead config here: it fires only when the resolver returns null, and a path-segment resolver
-      # always returns whatever sits at the index. Spring also refuses to start with `required: true`
-      # and a default configured together.
+      # 1.0 is the default version, so a request that resolves no version at all is served as v1
+      # rather than rejected. `required` must be false for that: Spring refuses to start with
+      # `required: true` and a default configured together.
+      #
+      # Note what this does not do. The version segment is still part of the URL template
+      # (`/api/{version}` on the controller), so /api/chat is a 404 — no property relaxes a path
+      # pattern — and PathApiVersionResolver returns whatever segment sits at the index rather than
+      # null, so the default is not reached by dropping the segment either. Making unversioned URLs
+      # resolve to v1 would need the controller mapped at both /api and /api/{version} plus an
+      # ApiVersionResolver bean using PathApiVersionResolver's predicate constructor, which Spring
+      # Boot does not expose as a property.
       use:
         path-segment: 1
-      required: true
+      required: false
+      default: "1.0"
       detect-supported: true
 
 management:
