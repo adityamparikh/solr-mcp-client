@@ -113,8 +113,6 @@ public class SolrAssistantController {
     @ApiResponse(responseCode = "502", description = "The chat model or Solr MCP server rejected the request")
     @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time")
     ResponseEntity<ChatReply> chat(
-            // springdoc documents this header wrongly on its own — required, with a frozen UUID
-            // default; OpenApiConfiguration's ParameterCustomizer corrects the document.
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, defaultValue = NEW_CONVERSATION_ID)
             @NotBlank(message = "conversationId must not be blank")
