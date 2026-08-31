@@ -29,7 +29,7 @@ dependencies {
     implementation(libs.springdoc.openapi.webmvc.ui)
     implementation(libs.spring.ai.mcp.client)
     implementation(libs.mcp.client.security)
-    implementation(libs.spring.ai.openai)
+  //  implementation(libs.spring.ai.openai)
     implementation(libs.spring.ai.anthropic)
 
     testImplementation(libs.spring.boot.actuator.test)
@@ -42,6 +42,17 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom("org.springframework.ai:spring-ai-bom:${libs.versions.spring.ai.get()}")
+    }
+}
+
+// Every jar this project publishes carries the licence texts in META-INF, as an ASF release
+// requires. Applied to all Jar tasks rather than to bootJar alone: the Spring Boot plugin also
+// produces the plain `-plain` jar, and a sources or javadoc jar added later would otherwise ship
+// without them. `from` takes the repository-root files, so the two copies cannot drift.
+tasks.withType<Jar>().configureEach {
+    metaInf {
+        from(layout.projectDirectory.file("LICENSE"))
+        from(layout.projectDirectory.file("NOTICE"))
     }
 }
 

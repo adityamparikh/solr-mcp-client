@@ -2,7 +2,8 @@
 #
 # Defaults describe the local development stack — the Solr MCP server running under its own `http`
 # profile on :8080, fronted by Keycloak on :8180. Every value is overridable for a deployed server;
-# only the client secret has no default, because a secret never belongs in committed configuration.
+# The client id and secret have no defaults: both identify an operator-managed confidential client
+# and must match the client registered with the identity provider.
 #
 # The server runs `validateAudienceClaim(true)`, so the token must carry an `aud` equal to that
 # server's canonical resource URI — confirm it with:
@@ -36,7 +37,7 @@ spring:
           # It names the connection, not the IdP client — that is `client-id` below.
           solr-mcp:
             authorization-grant-type: client_credentials
-            client-id: ${SOLR_MCP_OAUTH_CLIENT_ID:solr-mcp-server}
+            client-id: ${SOLR_MCP_OAUTH_CLIENT_ID}
             client-secret: ${SOLR_MCP_OAUTH_CLIENT_SECRET}
             # Empty by default: the server authorizes on the audience claim, not on scopes, and
             # Keycloak refuses a scope the client has not been assigned.

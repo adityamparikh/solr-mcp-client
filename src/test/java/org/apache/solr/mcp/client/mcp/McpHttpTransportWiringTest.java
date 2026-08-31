@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.solr.mcp.client.mcp;
 
 import io.swagger.v3.oas.models.OpenAPI;
@@ -29,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {
         "spring.ai.mcp.client.initialized=false",
-        "spring.ai.openai.api-key=test-key",
+        "spring.ai.anthropic.api-key=test-key",
         "SOLR_MCP_HTTP_URL=https://solr-mcp.example.com",
         "SOLR_MCP_OAUTH_CLIENT_ID=test-client",
         "SOLR_MCP_OAUTH_CLIENT_SECRET=test-secret",
@@ -47,7 +63,7 @@ class McpHttpTransportWiringTest {
 
     @Test
     void exposesTheSolrAssistantChatClient() {
-        assertThat(context.getBean("solrMcpChatClient")).isInstanceOf(ChatClient.class);
+        assertThat(context.getBean("chatClient")).isInstanceOf(ChatClient.class);
     }
 
     /**
@@ -81,7 +97,7 @@ class McpHttpTransportWiringTest {
         String document = mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        assertThat(document).contains("/api/1.0/chat").doesNotContain("{version}");
+        assertThat(document).contains("/api/v1/chat").doesNotContain("{version}");
     }
 
     @Test

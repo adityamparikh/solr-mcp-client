@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.solr.mcp.client.web;
 
 import io.modelcontextprotocol.spec.McpError;
@@ -38,6 +54,11 @@ class ProblemDetailExceptionHandler {
             "The Solr assistant could not complete the request.";
     private static final String VALIDATION_FALLBACK = "Request validation failed";
 
+    /**
+     * Constraint violations on the request body. Kept separate from
+     * {@link #handleInvalidParameter} because Spring raises a different exception for each, with no
+     * common supertype carrying the messages — the two differ only in how the errors are reached.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail handleInvalidBody(MethodArgumentNotValidException exception) {
         String detail = exception.getBindingResult().getFieldErrors().stream()
@@ -47,6 +68,11 @@ class ProblemDetailExceptionHandler {
         return badRequest(detail);
     }
 
+    /**
+     * Constraint violations on headers and path variables — the annotated method parameters rather
+     * than the body. The messages are the annotations' own, so they are safe to return verbatim;
+     * unlike upstream failures, they describe the caller's request and disclose nothing.
+     */
     @ExceptionHandler(HandlerMethodValidationException.class)
     ProblemDetail handleInvalidParameter(HandlerMethodValidationException exception) {
         String detail = exception.getParameterValidationResults().stream()

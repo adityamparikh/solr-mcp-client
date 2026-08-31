@@ -1,11 +1,51 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.solr.mcp.client;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+/**
+ * Entry point for the Solr assistant.
+ *
+ * <p>Deliberately empty beyond the bootstrap call. Component scanning starts from this package, so
+ * every capability is picked up from the subpackage that owns it — {@code assistant},
+ * {@code mcp}, {@code web} — and nothing is registered centrally here. A new capability gets a
+ * package with its own {@code @Configuration}, not a bean method on this class.
+ *
+ * <p>The application is a REST service in every profile. Profiles choose how it reaches the Solr
+ * MCP server, not what it serves; see {@link org.apache.solr.mcp.client.mcp}.
+ *
+ * <p>Excluded from the JaCoCo coverage floor in {@code build.gradle.kts}: a bootstrap class with no
+ * branches would only inflate the number without evidencing anything.
+ */
 @SpringBootApplication
 public class SolrMcpClientApplication {
 
+    /** Instantiated by Spring as a configuration class, not by application code. */
+    public SolrMcpClientApplication() {
+    }
+
+    /**
+     * Starts the application. No profile is activated here: {@code spring.profiles.default} settles
+     * that, so an operator can override the MCP transport without a code change.
+     *
+     * @param args passed through to Spring Boot unchanged
+     */
     public static void main(String[] args) {
         SpringApplication.run(SolrMcpClientApplication.class, args);
     }
