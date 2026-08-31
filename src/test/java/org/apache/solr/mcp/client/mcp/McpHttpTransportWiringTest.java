@@ -130,6 +130,31 @@ class McpHttpTransportWiringTest {
                 .hasToString("\"#/components/schemas/ChatReply\"");
     }
 
+    /**
+     * The conversation header must be documented as optional with no default value.
+     *
+     * <p>Guards two lies the document told. {@code @NotBlank} on the parameter made springdoc mark
+     * the header {@code required: true}, contradicting "omit to start a new one" — the constraint
+     * only forbids a <em>blank</em> header, never an absent one. And springdoc resolves the
+     * {@code #{...}} default expression once while building the document, baking a single random
+     * UUID in as the header's default — which Swagger UI then pre-fills and sends, silently routing
+     * every UI caller into the same conversation.
+     */
+    @Test
+    void documentsTheConversationHeaderAsOptionalWithNoDefault() throws Exception {
+        String document = mockMvc.perform(get("/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode header = new ObjectMapper().readTree(document)
+                .at("/paths/~1api~1v1~1chat/post/parameters/0");
+        assertThat(header.at("/name").asText()).isEqualTo("X-AI-Conversation-Id");
+        assertThat(header.at("/required").asBoolean(false)).isFalse();
+        assertThat(header.at("/schema/default").isMissingNode())
+                .as("the SpEL default must not be baked into the document as a fixed UUID")
+                .isTrue();
+    }
+
     @Test
     void leavesTheRestFacadeUnauthenticated() throws Exception {
         mockMvc.perform(post("/api/v1/chat").contentType(MediaType.APPLICATION_JSON)
