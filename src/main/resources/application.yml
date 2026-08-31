@@ -112,7 +112,8 @@ spring:
 
 logging:
   level:
-    # Uncomment to log the full LLM exchange. SimpleLoggerAdvisor is always in the advisor chain
+    root: info
+  # Uncomment to log the full LLM exchange. SimpleLoggerAdvisor is always in the advisor chain
     # (see ChatClientConfiguration) but self-guards on isDebugEnabled(), so this line is the only
     # switch. Because the advisor sits inside ToolCallingAdvisor's recursion, an exchange that calls
     # a Solr tool logs four entries rather than two: the initial request, the model's tool-call
