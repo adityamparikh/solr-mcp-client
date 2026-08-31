@@ -63,6 +63,29 @@ shared `config` or `service` package.
   builder in the application, so one assistant's prompt and tools would leak into unrelated ones.
 - Hand the `ToolCallbackProvider` to `defaultTools(...)` as-is. Calling `getToolCallbacks()` eagerly
   snapshots the MCP tool list while the context is still starting.
+- **Never declare a `ToolCallingAdvisor`.** Spring AI 2.0 moved tool calling into the advisor chain,
+  and `DefaultChatClientRequestSpec.buildAdvisorChain()` registers one per request unless the chain
+  already holds a `ToolAdvisor`. Declaring one only suppresses the framework's and pins defaults
+  that already match what this application wants (order `MIN_VALUE + 300`, internal conversation
+  history on). Registration happens on `call()`/`stream()`, not on `prompt()` — a chain read off
+  `prompt()` does not contain it yet, which is why `ChatClientConfigurationTest` drives a real call
+  against a stub model before asserting. Recipes written against the `2.0.0-M` milestones still
+  spell it `ToolCallAdvisor` and set `advisorOrder(HIGHEST_PRECEDENCE + 300)` plus
+  `disableInternalConversationHistory()` by hand; on 2.0.1 the first is a shim subclass and the
+  other two are the defaults.
+- Advisor order in `ChatClientConfiguration` is load-bearing in two directions, and both break
+  silently. Chat memory must stay **outside** the tool loop (`MIN_VALUE + 200` < `MIN_VALUE + 300`):
+  `autoRegisterToolCallingAdvisor()` reads exactly that comparison and turns the tool advisor's
+  internal conversation history *off* when a `MemoryAdvisor` is ordered after it, costing the loop
+  the messages it accumulates across iterations. `SimpleLoggerAdvisor` must stay **inside** it
+  (order `0`): that is what makes tool-negotiation traffic visible instead of just the opening
+  request and final answer. `ChatClientConfigurationTest` guards both.
+- `SimpleLoggerAdvisor` is registered unconditionally and gated by its log level alone — it
+  self-guards on `isDebugEnabled()`. The switch is
+  `logging.level.org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor=DEBUG` (DEBUG, not
+  the TRACE of pre-GA recipes), commented out in `application.yml`. It is a debugging tool, not a
+  deployment setting: it logs whole prompts and whole tool results, so user queries and indexed Solr
+  documents reach the log. Do not enable it with a broad `org.springframework.ai=DEBUG`.
 - For the outbound service token use `AuthorizedClientServiceOAuth2AuthorizedClientManager`. The
   manager Spring Security registers by default is request-bound and throws
   "servletRequest cannot be null" off a request thread, which includes MCP client initialization.
@@ -137,3 +160,10 @@ shared `config` or `service` package.
 - Context tests set `spring.ai.mcp.client.initialized=false` so the transport binds without
   launching a child process or opening a network connection.
 - Do not require a live Solr, MCP server, OpenAI account or identity provider for ordinary runs.
+- When stubbing a `ChatModel` for a tool-calling test, `getOptions()` must return
+  `ToolCallingChatOptions`, not `ChatOptions.builder().build()`. `ToolCallingAdvisor.adviseCall`
+  opens with an `instanceof ToolCallingChatOptions` check and delegates past the tool loop entirely
+  when it fails — no error and no log, so the test passes vacuously having exercised nothing. A bare
+  `mock(ChatModel.class)` is worse still: `getOptions()` returns null and the call NPEs before the
+  advisor chain is reached. Stub `ToolCallbackProvider.getToolCallbacks()` too; the default null
+  array only surfaces once the loop actually runs.

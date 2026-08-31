@@ -18,6 +18,7 @@ package org.apache.solr.mcp.client.assistant;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -49,6 +50,46 @@ import org.springframework.context.annotation.Configuration;
  * <p>The {@link ToolCallbackProvider} is handed over as-is instead of expanding
  * {@code getToolCallbacks()} eagerly, so the MCP tool list is resolved when the model first needs
  * it rather than while the application context is still starting.
+ *
+ * <h2>The advisor chain</h2>
+ *
+ * <p>Two advisors are declared here; a third arrives on its own. Ordered outermost first, as they
+ * run:
+ *
+ * <ol>
+ *   <li>{@link MessageChatMemoryAdvisor} — order {@code MIN_VALUE + 200}
+ *   <li>{@code ToolCallingAdvisor} — order {@code MIN_VALUE + 300}, <em>not declared here</em>
+ *   <li>{@link SimpleLoggerAdvisor} — order {@code 0}
+ * </ol>
+ *
+ * <p>{@code ToolCallingAdvisor} is deliberately absent from the code below. Spring AI 2.0 moved tool
+ * calling out of {@code ChatClient}'s internals and into the advisor chain, and
+ * {@code DefaultChatClientRequestSpec.buildAdvisorChain()} registers the advisor per request unless
+ * the chain already holds something implementing {@code ToolAdvisor} — declaring one here would only
+ * suppress the framework's and pin defaults that are already the values we want. Note the
+ * registration happens on {@code call()}/{@code stream()}, not on {@code prompt()}: a chain read off
+ * {@code prompt()} does not yet contain it.
+ *
+ * <p>The two order relationships are load-bearing, and both fail silently rather than loudly:
+ *
+ * <ul>
+ *   <li><b>Memory outside the tool loop.</b> {@code autoRegisterToolCallingAdvisor()} derives the
+ *       tool advisor's internal conversation history from this comparison alone — a
+ *       {@code MemoryAdvisor} ordered <em>after</em> the tool advisor switches that history off. The
+ *       tool loop needs it on to accumulate assistant and tool messages across iterations, and the
+ *       default orders above already arrange that. Do not reorder the memory advisor.
+ *   <li><b>Logger inside the tool loop.</b> {@link SimpleLoggerAdvisor} logs what passes through it,
+ *       so sitting inside the tool advisor's recursion is what makes tool negotiation visible: the
+ *       initial request, the model's tool-call request, the follow-up carrying tool results, and the
+ *       final answer. Its default order of {@code 0} puts it there. Giving it a high precedence
+ *       would move it outside and quietly reduce it to logging only the first and last of those.
+ * </ul>
+ *
+ * <p>{@code SimpleLoggerAdvisor} logs at DEBUG and is registered unconditionally; it self-guards
+ * with {@code isDebugEnabled()}, so it costs a boolean check per pass until switched on with
+ * {@code logging.level.org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor=DEBUG}. Treat
+ * that switch as a debugging tool rather than something to leave on: the output is whole prompts and
+ * whole Solr tool results, which means user queries and indexed document contents in the log.
  */
 @Configuration(proxyBeanMethods = false)
 class ChatClientConfiguration {
@@ -67,7 +108,9 @@ class ChatClientConfiguration {
             ToolCallbackProvider mcpToolCallbacks) {
         return chatClientBuilder
                 .defaultSystem(SYSTEM_PROMPT)
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        SimpleLoggerAdvisor.builder().build())
                 .defaultTools(mcpToolCallbacks)
                 .build();
     }

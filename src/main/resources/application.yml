@@ -95,6 +95,23 @@ spring:
       default: "v1"
       detect-supported: true
 
+logging:
+  level:
+    # Uncomment to log the full LLM exchange. SimpleLoggerAdvisor is always in the advisor chain
+    # (see ChatClientConfiguration) but self-guards on isDebugEnabled(), so this line is the only
+    # switch. Because the advisor sits inside ToolCallingAdvisor's recursion, an exchange that calls
+    # a Solr tool logs four entries rather than two: the initial request, the model's tool-call
+    # request, the follow-up carrying the tool results, and the final answer.
+    #
+    # DEBUG, not TRACE — the level changed in Spring AI 2.0 GA, and recipes written against the
+    # 2.0.0-M milestones still say TRACE, which now produces no output at all.
+    #
+    # Debugging only. The output is whole prompts and whole tool results: user queries and indexed
+    # Solr document contents land in the log, so do not leave this on in a deployed environment.
+    # Prefer this specific logger over a broad org.springframework.ai=DEBUG, which enables the same
+    # payload logging as a side effect.
+    # org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: DEBUG
+
 management:
   endpoints:
     web:
