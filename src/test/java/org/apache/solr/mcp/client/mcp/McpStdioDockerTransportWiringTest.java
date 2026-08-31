@@ -21,13 +21,16 @@ import org.springframework.ai.mcp.client.common.autoconfigure.properties.McpStdi
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the {@code mcp-stdio-docker} wiring without launching a container: the client is left
- * uninitialized, so the transport binds but never spawns {@code docker}.
+ * uninitialized, so the transport binds but never spawns {@code docker}, and {@link
+ * McpToolVerifier} is replaced with a mock because listing the server's tools would open the very
+ * connection that property defers.
  *
  * <p>The assertions pin the two things that separate this profile from {@code mcp-stdio} rather
  * than the whole argv for its own sake. {@code -i} keeps the container's stdin open, without which
@@ -43,6 +46,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 @ActiveProfiles("mcp-stdio-docker")
 class McpStdioDockerTransportWiringTest {
+
+    // McpToolVerifier lists the server's tools, and listing them is what opens the connection this
+    // test exists to avoid: it drives Spring AI's LifecycleInitializer regardless of
+    // spring.ai.mcp.client.initialized. Replacing the bean keeps the context to pure wiring.
+    @MockitoBean
+    McpToolVerifier toolVerifier;
 
     @Autowired
     McpStdioClientProperties stdioProperties;

@@ -23,7 +23,6 @@ import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -47,8 +46,14 @@ import java.util.stream.Collectors;
  * renames a tool. What an operator actually needs is the names the server exposes, which is why the
  * successful path logs them.
  *
- * <p>Verification is skipped when {@code spring.ai.mcp.client.initialized} is false: the clients
- * have been told not to connect, so there is nothing to list and nothing to conclude from silence.
+ * <p>Verification is unconditional. There is no configuration that turns it off, because an
+ * assistant with nothing to call is never a state worth starting in. One consequence is worth
+ * knowing before changing anything here: listing the tools is what first drives Spring AI's
+ * {@code LifecycleInitializer}, so this class connects even when {@code
+ * spring.ai.mcp.client.initialized} is false — that property defers the connection, and verifying
+ * necessarily undoes the deferral. A context that must not reach a server therefore has to replace
+ * this bean rather than set that property; the transport wiring tests use {@code @MockitoBean} for
+ * exactly that.
  */
 @Component
 class McpToolVerifier implements InitializingBean {
@@ -56,24 +61,16 @@ class McpToolVerifier implements InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(McpToolVerifier.class);
 
     private final ObjectProvider<ToolCallbackProvider> toolCallbacks;
-    private final boolean clientsInitialized;
 
     // The provider is injected as an ObjectProvider because "no ToolCallbackProvider bean at all"
     // is one of the conditions this class exists to report; a hard dependency would turn it into an
     // opaque context-startup failure instead.
-    McpToolVerifier(ObjectProvider<ToolCallbackProvider> toolCallbacks,
-                    @Value("${spring.ai.mcp.client.initialized:true}") boolean clientsInitialized) {
+    McpToolVerifier(ObjectProvider<ToolCallbackProvider> toolCallbacks) {
         this.toolCallbacks = toolCallbacks;
-        this.clientsInitialized = clientsInitialized;
     }
 
     @Override
     public void afterPropertiesSet() {
-        if (!clientsInitialized) {
-            log.info("MCP clients are not initialized; skipping Solr MCP tool verification");
-            return;
-        }
-
         SortedSet<String> available = availableToolNames();
         if (available.isEmpty()) {
             throw new IllegalStateException("""
