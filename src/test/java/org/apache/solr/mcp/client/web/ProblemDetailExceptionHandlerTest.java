@@ -31,8 +31,6 @@ import static org.mockito.Mockito.mock;
 
 class ProblemDetailExceptionHandlerTest {
 
-    private final ProblemDetailExceptionHandler handler = new ProblemDetailExceptionHandler();
-
     @Test
     void fallsBackToAGenericDetailWhenABodyViolationCarriesNoMessage() {
         MethodArgumentNotValidException exception = mock(MethodArgumentNotValidException.class);
@@ -40,7 +38,7 @@ class ProblemDetailExceptionHandlerTest {
         given(exception.getBindingResult()).willReturn(bindingResult);
         given(bindingResult.getFieldErrors()).willReturn(List.of());
 
-        ProblemDetail problem = handler.handleInvalidBody(exception);
+        ProblemDetail problem = ProblemDetailExceptionHandler.invalidBody(exception);
 
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getDetail()).isEqualTo("Request validation failed");
@@ -51,7 +49,7 @@ class ProblemDetailExceptionHandlerTest {
         HandlerMethodValidationException exception = mock(HandlerMethodValidationException.class);
         given(exception.getParameterValidationResults()).willReturn(List.of());
 
-        ProblemDetail problem = handler.handleInvalidParameter(exception);
+        ProblemDetail problem = ProblemDetailExceptionHandler.invalidParameter(exception);
 
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getDetail()).isEqualTo("Request validation failed");

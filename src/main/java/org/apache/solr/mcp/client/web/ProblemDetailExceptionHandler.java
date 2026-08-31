@@ -19,22 +19,31 @@ package org.apache.solr.mcp.client.web;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpTransportException;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.model.tool.ToolCallLimitExceededException;
 import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.net.URI;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -46,7 +55,7 @@ import java.util.stream.Collectors;
  * should not reach an API caller.
  */
 @RestControllerAdvice
-class ProblemDetailExceptionHandler {
+class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailExceptionHandler.class);
 
@@ -56,13 +65,26 @@ class ProblemDetailExceptionHandler {
             "The Solr assistant could not complete the request.";
     private static final String VALIDATION_FALLBACK = "Request validation failed";
 
+    private static final String ERROR_TYPE_BASE = "https://solr.apache.org/mcp-client/errors/";
+    private static final URI VALIDATION_TYPE = URI.create(ERROR_TYPE_BASE + "validation-failed");
+    private static final URI UPSTREAM_UNAVAILABLE_TYPE = URI.create(ERROR_TYPE_BASE + "upstream-unavailable");
+    private static final URI UPSTREAM_FAILED_TYPE = URI.create(ERROR_TYPE_BASE + "upstream-failed");
+
     /**
-     * Constraint violations on the request body. Kept separate from
-     * {@link #handleInvalidParameter} because Spring raises a different exception for each, with no
+     * Constraint violations on the request body. Overridden rather than added as a second
+     * {@code @ExceptionHandler}: the base class already maps this exception, and declaring it twice
+     * in one advice fails at startup as an ambiguous mapping. Kept separate from
+     * {@link #invalidParameter} because Spring raises a different exception for each, with no
      * common supertype carrying the messages — the two differ only in how the errors are reached.
      */
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    ProblemDetail handleInvalidBody(MethodArgumentNotValidException exception) {
+    @Override
+    protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException exception, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        return handleExceptionInternal(exception, invalidBody(exception), headers, status, request);
+    }
+
+    static ProblemDetail invalidBody(MethodArgumentNotValidException exception) {
         String detail = exception.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .filter(Objects::nonNull)
@@ -76,8 +98,14 @@ class ProblemDetailExceptionHandler {
      * than the body. The messages are the annotations' own, so they are safe to return verbatim;
      * unlike upstream failures, they describe the caller's request and disclose nothing.
      */
-    @ExceptionHandler(HandlerMethodValidationException.class)
-    ProblemDetail handleInvalidParameter(HandlerMethodValidationException exception) {
+    @Override
+    protected @Nullable ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException exception, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        return handleExceptionInternal(exception, invalidParameter(exception), headers, status, request);
+    }
+
+    static ProblemDetail invalidParameter(HandlerMethodValidationException exception) {
         String detail = exception.getParameterValidationResults().stream()
                 .flatMap(result -> result.getResolvableErrors().stream())
                 .map(MessageSourceResolvable::getDefaultMessage)
@@ -89,9 +117,11 @@ class ProblemDetailExceptionHandler {
 
     /** Retryable upstream conditions: an I/O timeout, or a transport that dropped mid-call. */
     @ExceptionHandler({ResourceAccessException.class, McpTransportException.class})
+    @ResponseStatus(HttpStatus.GATEWAY_TIMEOUT)
     ProblemDetail handleUpstreamUnavailable(RuntimeException exception) {
         log.warn("Transient upstream failure serving a chat request", exception);
-        return ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL);
+        return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL,
+                "Upstream Unavailable", UPSTREAM_UNAVAILABLE_TYPE);
     }
 
     /**
@@ -107,13 +137,31 @@ class ProblemDetailExceptionHandler {
     @ExceptionHandler({RestClientException.class, McpError.class, ToolExecutionException.class,
             ToolCallLimitExceededException.class, OAuth2AuthorizationException.class,
             SolrAssistant.EmptyAnswerException.class})
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
     ProblemDetail handleUpstreamFailure(RuntimeException exception) {
         log.error("Upstream failure serving a chat request", exception);
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, FAILED_DETAIL);
+        return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL,
+                "Upstream Request Failed", UPSTREAM_FAILED_TYPE);
     }
 
     private static ProblemDetail badRequest(String detail) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                detail.isEmpty() ? VALIDATION_FALLBACK : detail);
+        return problem(HttpStatus.BAD_REQUEST, detail.isEmpty() ? VALIDATION_FALLBACK : detail,
+                "Request Validation Failed", VALIDATION_TYPE);
+    }
+
+    /**
+     * Every problem carries a {@code type}, a {@code title} and a {@code timestamp} beyond the
+     * status and detail RFC 9457 requires. The type is the stable, machine-readable name of the
+     * failure — a client should branch on it rather than on the prose in {@code detail}, which is
+     * free to be reworded. It identifies the failure; it is not a promise of a live page. The
+     * timestamp is what correlates a caller's response with the server-side log line, which is the
+     * only place the real upstream message is written.
+     */
+    private static ProblemDetail problem(HttpStatus status, String detail, String title, URI type) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        problem.setType(type);
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
     }
 }

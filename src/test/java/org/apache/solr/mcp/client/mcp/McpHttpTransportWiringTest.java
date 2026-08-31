@@ -16,6 +16,8 @@
  */
 package org.apache.solr.mcp.client.mcp;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -30,6 +32,8 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -105,6 +109,57 @@ class McpHttpTransportWiringTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(document).contains("/api/v1/chat").doesNotContain("{version}");
+    }
+
+    /**
+     * Error responses must advertise {@code ProblemDetail}, which is what
+     * {@code ProblemDetailExceptionHandler} actually returns.
+     *
+     * <p>Guards a defect the document shipped with: an {@code @ApiResponse} that declares only a
+     * description does not declare an empty body — springdoc keeps the schema derived from the
+     * handler method's return type, so 400, 502 and 504 all claimed a {@code ChatReply} body. A
+     * generated client would have reproduced that faithfully, and no other test could see it.
+     */
+    @Test
+    void documentsErrorsAsProblemDetail() throws Exception {
+        String document = mockMvc.perform(get("/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode chat = new ObjectMapper().readTree(document)
+                .at("/paths/~1api~1v1~1chat/post/responses");
+        for (String errorCode : List.of("400", "502", "504")) {
+            assertThat(chat.at("/" + errorCode + "/content/application~1problem+json/schema/$ref"))
+                    .as("%s must be documented as ProblemDetail", errorCode)
+                    .hasToString("\"#/components/schemas/ProblemDetail\"");
+        }
+        assertThat(chat.at("/200/content/application~1json/schema/$ref"))
+                .hasToString("\"#/components/schemas/ChatReply\"");
+    }
+
+    /**
+     * The conversation header must be documented as optional with no default value.
+     *
+     * <p>Guards two lies the document told. {@code @NotBlank} on the parameter made springdoc mark
+     * the header {@code required: true}, contradicting "omit to start a new one" — the constraint
+     * only forbids a <em>blank</em> header, never an absent one. And springdoc resolves the
+     * {@code #{...}} default expression once while building the document, baking a single random
+     * UUID in as the header's default — which Swagger UI then pre-fills and sends, silently routing
+     * every UI caller into the same conversation.
+     */
+    @Test
+    void documentsTheConversationHeaderAsOptionalWithNoDefault() throws Exception {
+        String document = mockMvc.perform(get("/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode header = new ObjectMapper().readTree(document)
+                .at("/paths/~1api~1v1~1chat/post/parameters/0");
+        assertThat(header.at("/name").asText()).isEqualTo("X-AI-Conversation-Id");
+        assertThat(header.at("/required").asBoolean(false)).isFalse();
+        assertThat(header.at("/schema/default").isMissingNode())
+                .as("the SpEL default must not be baked into the document as a fixed UUID")
+                .isTrue();
     }
 
     @Test

@@ -18,6 +18,8 @@ package org.apache.solr.mcp.client.web;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,6 +28,7 @@ import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -104,10 +107,14 @@ public class SolrAssistantController {
                     + "same X-AI-Conversation-Id. The id used is returned in that header; omit it "
                     + "on the request to start a new conversation.")
     @ApiResponse(responseCode = "200", description = "The assistant's answer")
-    @ApiResponse(responseCode = "400", description = "The request failed validation")
+    @ApiResponse(responseCode = "400", description = "The request failed validation",
+            content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "502", description = "The chat model or Solr MCP server rejected the request")
     @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time")
     ResponseEntity<ChatReply> chat(
+            // springdoc documents this header wrongly on its own — required, with a frozen UUID
+            // default; OpenApiConfiguration's ParameterCustomizer corrects the document.
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, defaultValue = NEW_CONVERSATION_ID)
             @NotBlank(message = "conversationId must not be blank")
@@ -125,7 +132,9 @@ public class SolrAssistantController {
                     + "process and is never evicted on its own, so long-lived deployments should "
                     + "release conversations when a session ends.")
     @ApiResponse(responseCode = "204", description = "The conversation was released")
-    @ApiResponse(responseCode = "400", description = "The conversation id failed validation")
+    @ApiResponse(responseCode = "400", description = "The conversation id failed validation",
+            content = @Content(mediaType = MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                    schema = @Schema(implementation = ProblemDetail.class)))
     ResponseEntity<Void> forget(@PathVariable
                                 @NotBlank(message = "conversationId must not be blank")
                                 String conversationId) {
