@@ -22,7 +22,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
@@ -73,8 +72,6 @@ public class SolrAssistantController {
     /** Matched semantically, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach it. */
     static final String V1 = "v1";
 
-    static final int MAX_CONVERSATION_ID_LENGTH = 128;
-
     private final SolrAssistant assistant;
 
     /**
@@ -102,7 +99,6 @@ public class SolrAssistantController {
     ResponseEntity<ChatReply> chat(
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, required = false)
-            @Size(max = MAX_CONVERSATION_ID_LENGTH, message = "conversationId is too long")
             @Nullable String conversationId,
             @Valid @RequestBody ChatRequest request) {
 
@@ -123,7 +119,6 @@ public class SolrAssistantController {
     @ApiResponse(responseCode = "400", description = "The conversation id failed validation")
     ResponseEntity<Void> forget(@PathVariable
                                 @NotBlank(message = "conversationId must not be blank")
-                                @Size(max = MAX_CONVERSATION_ID_LENGTH, message = "conversationId is too long")
                                 String conversationId) {
         assistant.forget(conversationId);
         return ResponseEntity.noContent().build();

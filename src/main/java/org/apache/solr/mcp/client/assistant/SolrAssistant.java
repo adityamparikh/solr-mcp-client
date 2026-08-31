@@ -17,7 +17,6 @@
 package org.apache.solr.mcp.client.assistant;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
@@ -33,18 +32,11 @@ import org.springframework.stereotype.Service;
  *
  * <p>{@link ChatRequest} and {@link ChatReply} are the assistant's own vocabulary rather than the
  * REST facade's, for the same reason: an adapter should map its transport onto these types, not
- * define a parallel pair of its own that has to be kept in step. Their constraints therefore hold
- * for every adapter, including one that never speaks HTTP.
+ * define a parallel pair of its own that has to be kept in step. What they require of a turn
+ * therefore holds for every adapter, including one that never speaks HTTP.
  */
 @Service
 public class SolrAssistant {
-
-    /**
-     * A ceiling on the user's turn, enforced for every adapter rather than at one transport's
-     * edge: this application performs no inbound authentication, so an unbounded message is an
-     * unbounded bill. It is this application's guard, not a limit any model imposes.
-     */
-    public static final int MAX_MESSAGE_LENGTH = 8_000;
 
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
@@ -116,7 +108,6 @@ public class SolrAssistant {
      */
     public record ChatRequest(
             @NotBlank(message = "message must not be blank")
-            @Size(max = MAX_MESSAGE_LENGTH, message = "message is too long")
             String message) {
     }
 

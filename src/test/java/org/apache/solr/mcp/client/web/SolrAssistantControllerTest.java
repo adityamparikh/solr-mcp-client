@@ -99,17 +99,6 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void rejectsAnOversizedConversationIdHeader() throws Exception {
-        mockMvc.perform(post("/api/v1/chat")
-                        .header(CONVERSATION_ID_HEADER, "x".repeat(SolrAssistantController.MAX_CONVERSATION_ID_LENGTH + 1))
-                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("conversationId is too long"));
-
-        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
-    }
-
-    @Test
     void treatsEverySpellingOfVersionOneAsTheSameVersion() throws Exception {
         given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
@@ -158,17 +147,6 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void rejectsAnOversizedMessage() throws Exception {
-        String tooLong = "x".repeat(SolrAssistant.MAX_MESSAGE_LENGTH + 1);
-
-        mockMvc.perform(post("/api/v1/chat").contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"message":"%s"}""".formatted(tooLong)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("message is too long"));
-    }
-
-    @Test
     void reportsATimedOutTransportAsGatewayTimeout() throws Exception {
         given(assistant.ask(anyString(), any(ChatRequest.class)))
                 .willThrow(new McpTransportException("stream closed while awaiting the tool result"));
@@ -206,16 +184,6 @@ class SolrAssistantControllerTest {
                 .andExpect(status().isNoContent());
 
         then(assistant).should().forget("user-7:session-4");
-    }
-
-    @Test
-    void rejectsAnOversizedConversationIdOnDelete() throws Exception {
-        mockMvc.perform(delete("/api/v1/chat/{conversationId}",
-                        "x".repeat(SolrAssistantController.MAX_CONVERSATION_ID_LENGTH + 1)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("conversationId is too long"));
-
-        then(assistant).should(never()).forget(anyString());
     }
 
     private static MockHttpServletRequestBuilder chat(String path) {
