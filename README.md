@@ -345,8 +345,8 @@ purpose — misconfiguration should fail at startup, not on the first request.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-export SOLR_MCP_OAUTH_CLIENT_ID=solr-mcp-server
-export SOLR_MCP_OAUTH_CLIENT_SECRET=...
+export SOLR_MCP_OAUTH_CLIENT_ID=solr-mcp-service
+export SOLR_MCP_OAUTH_CLIENT_SECRET=dev-only-not-a-secret
 
 ./gradlew bootRun --args='--spring.profiles.active=mcp-http'
 ```
@@ -366,11 +366,19 @@ and Keycloak refuses a scope the client has not been assigned.
 
 #### Getting the Keycloak client secret
 
-For the local Keycloak instance, open <http://localhost:8180>, select the `solr-mcp` realm, and go
-to **Clients → solr-mcp-server → Credentials**. The client must be **confidential** (client
-authentication enabled) with **Service accounts enabled** — a public client cannot use the
-`client_credentials` grant at all. Using a different client's secret produces
-`401 unauthorized_client` at the token endpoint, before Solr MCP is contacted.
+The Solr MCP server's `compose.yaml` starts Keycloak and imports a realm containing
+`solr-mcp-service` — a confidential client with service accounts enabled, dedicated to
+machine-to-machine callers like this one. Its secret is `dev-only-not-a-secret`, committed there on
+purpose as a development credential.
+
+For a Keycloak set up some other way, open <http://localhost:8180>, select the `solr-mcp` realm, and
+go to **Clients → *your client* → Credentials**. It must be **confidential** (client authentication
+enabled) with **Service accounts enabled** — a public client cannot use the `client_credentials`
+grant at all. Using a different client's secret produces `401 unauthorized_client` at the token
+endpoint, before Solr MCP is contacted.
+
+Do not point this at the server's own resource-server client. The service token must belong to this
+application, not to the thing it calls.
 
 #### The audience claim is not optional
 

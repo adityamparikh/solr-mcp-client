@@ -25,7 +25,7 @@
 #   SOLR_MCP_HTTP_URL              default http://localhost:8080
 #   SOLR_MCP_HTTP_ENDPOINT         default /mcp
 #   SOLR_MCP_OAUTH_TOKEN_URI       default the local Keycloak realm
-#   SOLR_MCP_OAUTH_CLIENT_ID       default solr-mcp-server
+#   SOLR_MCP_OAUTH_CLIENT_ID       default solr-mcp-service
 #   SOLR_MCP_OAUTH_SCOPES          optional, comma-separated
 #   SOLR_MCP_OAUTH_AUDIENCE        optional; sent as `audience=` on the token request. Auth0 needs
 #                                  this to put the resource URI in `aud`; Keycloak ignores it and
@@ -35,7 +35,7 @@ set -euo pipefail
 SOLR_MCP_HTTP_URL=${SOLR_MCP_HTTP_URL:-http://localhost:8080}
 SOLR_MCP_HTTP_ENDPOINT=${SOLR_MCP_HTTP_ENDPOINT:-/mcp}
 SOLR_MCP_OAUTH_TOKEN_URI=${SOLR_MCP_OAUTH_TOKEN_URI:-http://localhost:8180/realms/solr-mcp/protocol/openid-connect/token}
-SOLR_MCP_OAUTH_CLIENT_ID=${SOLR_MCP_OAUTH_CLIENT_ID:-solr-mcp-server}
+SOLR_MCP_OAUTH_CLIENT_ID=${SOLR_MCP_OAUTH_CLIENT_ID:-solr-mcp-service}
 SOLR_MCP_OAUTH_SCOPES=${SOLR_MCP_OAUTH_SCOPES:-}
 SOLR_MCP_OAUTH_AUDIENCE=${SOLR_MCP_OAUTH_AUDIENCE:-}
 
@@ -72,8 +72,18 @@ TOKEN=$(echo "$RESPONSE" | jq -r '.access_token // empty')
 note "issued for client $SOLR_MCP_OAUTH_CLIENT_ID"
 
 step "Checking the aud claim"
-CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' \
-    | { read -r p; printf '%s' "$p$(printf '=%.0s' $(seq $(( (4 - ${#p} % 4) % 4 ))))"; } | base64 -d 2>/dev/null)
+# Pad the base64url payload back to a multiple of 4. The guard matters: `seq 0` is not portable —
+# GNU prints nothing, BSD counts down and prints "1 0" — and `printf '=%.0s'` with no arguments
+# still emits one '='. Unguarded, a payload that is already aligned gains padding, which a strict
+# decoder (GNU coreutils base64 requires a length divisible by 4) rejects. Decode errors are not
+# silenced: an undecodable payload must not be reported as a missing aud claim, which would send
+# the operator to fix an identity provider that is behaving correctly.
+CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | {
+    read -r p
+    pad=$(( (4 - ${#p} % 4) % 4 ))
+    [ "$pad" -gt 0 ] && p="$p$(printf '=%.0s' $(seq "$pad"))"
+    printf '%s' "$p"
+} | base64 -d) || fail "could not decode the token payload — the response may not be a JWT"
 note "iss $(echo "$CLAIMS" | jq -r '.iss // "(none)"')"
 note "aud $(echo "$CLAIMS" | jq -c '.aud // "(none)"')"
 if ! echo "$CLAIMS" | jq -e --arg r "$RESOURCE" '[.aud] | flatten | index($r)' >/dev/null; then
