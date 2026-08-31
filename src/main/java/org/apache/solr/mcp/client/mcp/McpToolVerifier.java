@@ -16,12 +16,12 @@
  */
 package org.apache.solr.mcp.client.mcp;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
  * exactly that.
  */
 @Component
-class McpToolVerifier implements InitializingBean {
+class McpToolVerifier {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolVerifier.class);
 
@@ -69,8 +69,8 @@ class McpToolVerifier implements InitializingBean {
         this.toolCallbacks = toolCallbacks;
     }
 
-    @Override
-    public void afterPropertiesSet() {
+    @PostConstruct
+    void verifyToolsAvailable() {
         SortedSet<String> available = availableToolNames();
         if (available.isEmpty()) {
             throw new IllegalStateException("""
