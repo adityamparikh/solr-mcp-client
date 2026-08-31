@@ -64,7 +64,7 @@ public class SolrAssistant {
     }
 
     /**
-     * Answers {@code message} in the context of {@code conversationId}, calling Solr MCP tools as
+     * Answers {@code request} in the context of {@code conversationId}, calling Solr MCP tools as
      * the model requires them.
      *
      * <p>Blocks for the whole exchange, tool round-trips included, so a single call may take far
@@ -72,14 +72,14 @@ public class SolrAssistant {
      *
      * @param conversationId scopes the retained turns; an id never seen before starts a new
      *                       conversation rather than failing
-     * @param message        the user's turn
+     * @param request        the user's turn
      * @return the model's answer, with any tool calls already resolved
      * @throws EmptyAnswerException if the model completed without producing any content, which
      *                              {@code ChatClient} reports as a null body
      */
-    public String ask(String conversationId, String message) {
+    public ChatReply ask(String conversationId, ChatRequest request) {
         String answer = chatClient.prompt()
-                .user(message)
+                .user(request.message())
                 .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
@@ -91,7 +91,7 @@ public class SolrAssistant {
             throw new EmptyAnswerException(
                     "The chat model returned no content for conversation " + conversationId);
         }
-        return answer;
+        return new ChatReply(answer);
     }
 
     /**

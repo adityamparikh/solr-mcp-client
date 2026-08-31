@@ -109,11 +109,9 @@ public class SolrAssistantController {
         String conversation = StringUtils.hasText(conversationId)
                 ? conversationId
                 : UUID.randomUUID().toString();
-        String answer = assistant.ask(conversation, request.message());
-
         return ResponseEntity.ok()
                 .header(CONVERSATION_ID_HEADER, conversation)
-                .body(new ChatReply(answer));
+                .body(assistant.ask(conversation, request));
     }
 
     @DeleteMapping(path = "/chat/{conversationId}", version = V1)

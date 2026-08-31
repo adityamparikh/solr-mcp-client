@@ -51,9 +51,10 @@ class SolrAssistantTest {
         when(requestSpec.call()).thenReturn(responseSpec);
         when(responseSpec.content()).thenReturn("I found 3 documents.");
 
-        String answer = assistant.ask("user-7:session-4", "Find documents about SolrCloud");
+        SolrAssistant.ChatReply reply = assistant.ask("user-7:session-4",
+                new SolrAssistant.ChatRequest("Find documents about SolrCloud"));
 
-        assertThat(answer).isEqualTo("I found 3 documents.");
+        assertThat(reply.content()).isEqualTo("I found 3 documents.");
         verify(advisorSpec).param(ChatMemory.CONVERSATION_ID, "user-7:session-4");
     }
 
@@ -72,7 +73,8 @@ class SolrAssistantTest {
         when(responseSpec.content()).thenReturn(null);
 
         assertThatExceptionOfType(SolrAssistant.EmptyAnswerException.class)
-                .isThrownBy(() -> assistant.ask("user-7:session-4", "Find documents about SolrCloud"))
+                .isThrownBy(() -> assistant.ask("user-7:session-4",
+                        new SolrAssistant.ChatRequest("Find documents about SolrCloud")))
                 .withMessageContaining("user-7:session-4");
     }
 
