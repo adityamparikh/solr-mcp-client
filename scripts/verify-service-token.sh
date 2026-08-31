@@ -60,13 +60,20 @@ else
 fi
 
 step "Requesting a client_credentials token from $SOLR_MCP_OAUTH_TOKEN_URI"
-TOKEN_ARGS=(-d grant_type=client_credentials
-            -d "client_id=$SOLR_MCP_OAUTH_CLIENT_ID"
-            -d "client_secret=$SOLR_MCP_OAUTH_CLIENT_SECRET")
-[ -n "$SOLR_MCP_OAUTH_SCOPES" ] && TOKEN_ARGS+=(-d "scope=${SOLR_MCP_OAUTH_SCOPES//,/ }")
-[ -n "$SOLR_MCP_OAUTH_AUDIENCE" ] && TOKEN_ARGS+=(-d "audience=$SOLR_MCP_OAUTH_AUDIENCE")
+# The form is built here and handed to curl on stdin rather than as -d arguments, so the client
+# secret never appears in the process table where `ps` would show it to every other user on the
+# host. Each value is percent-encoded too: a secret containing & or = would otherwise be cut in
+# half by the form parser and read as a refused grant rather than a quoting mistake.
+form_encode() { printf '%s' "$1" | jq -sRr @uri; }
 
-RESPONSE=$(curl -s -X POST "$SOLR_MCP_OAUTH_TOKEN_URI" "${TOKEN_ARGS[@]}")
+FORM="grant_type=client_credentials"
+FORM="$FORM&client_id=$(form_encode "$SOLR_MCP_OAUTH_CLIENT_ID")"
+FORM="$FORM&client_secret=$(form_encode "$SOLR_MCP_OAUTH_CLIENT_SECRET")"
+[ -n "$SOLR_MCP_OAUTH_SCOPES" ] && FORM="$FORM&scope=$(form_encode "${SOLR_MCP_OAUTH_SCOPES//,/ }")"
+[ -n "$SOLR_MCP_OAUTH_AUDIENCE" ] && FORM="$FORM&audience=$(form_encode "$SOLR_MCP_OAUTH_AUDIENCE")"
+
+RESPONSE=$(printf '%s' "$FORM" | curl -s -X POST "$SOLR_MCP_OAUTH_TOKEN_URI" \
+    -H 'Content-Type: application/x-www-form-urlencoded' --data-binary @-)
 TOKEN=$(echo "$RESPONSE" | jq -r '.access_token // empty')
 [ -n "$TOKEN" ] || fail "the grant was refused: $(echo "$RESPONSE" | jq -c '{error, error_description}' 2>/dev/null || echo "$RESPONSE")"
 note "issued for client $SOLR_MCP_OAUTH_CLIENT_ID"

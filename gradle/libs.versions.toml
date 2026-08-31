@@ -6,6 +6,13 @@ sonarqube = "7.4.0.8496"
 jacoco = "0.8.15"
 spring-ai = "2.0.1"
 springdoc = "3.1.0"
+# Pre-1.0, and it sits in the auth path: McpHttpOAuth2Configuration hands it the whole job of
+# attaching the outbound service token. Treat a bump as a behavioural change to be read rather than
+# a routine version bump — a 0.x minor may move a default without saying so, and this library
+# already documents one default in its README that its code contradicts (see application-mcp-http
+# .yml, which states dynamic-client-registration rather than relying on it). 0.1.14 is the latest
+# release as of 2026-08-31; check what changed before moving, and re-run
+# scripts/verify-service-token.sh against a real server afterwards.
 mcp-client-security = "0.1.14"
 
 [libraries]
