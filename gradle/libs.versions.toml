@@ -16,6 +16,9 @@ springdoc = "3.1.0"
 mcp-client-security = "0.1.14"
 
 [libraries]
+# Version managed by the Spring Boot BOM; spring-core already depends on it, but this project
+# imports the annotations directly, so the dependency is declared rather than inherited.
+jspecify = { module = "org.jspecify:jspecify" }
 spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
 spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }

@@ -24,6 +24,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
@@ -70,7 +73,6 @@ public class SolrAssistantController {
     /** Matched semantically, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach it. */
     static final String V1 = "v1";
 
-    static final int MAX_MESSAGE_LENGTH = 8_000;
     static final int MAX_CONVERSATION_ID_LENGTH = 128;
 
     private final SolrAssistant assistant;
@@ -101,7 +103,7 @@ public class SolrAssistantController {
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, required = false)
             @Size(max = MAX_CONVERSATION_ID_LENGTH, message = "conversationId is too long")
-            String conversationId,
+            @Nullable String conversationId,
             @Valid @RequestBody ChatRequest request) {
 
         String conversation = StringUtils.hasText(conversationId)
@@ -127,29 +129,5 @@ public class SolrAssistantController {
                                 String conversationId) {
         assistant.forget(conversationId);
         return ResponseEntity.noContent().build();
-    }
-
-    /**
-     * The user's turn, and nothing else. The conversation it belongs to travels in
-     * {@code X-AI-Conversation-Id}, not in this body — see the class documentation for why.
-     *
-     * <p>The length ceiling is a guard on this facade, not a model limit: without inbound
-     * authentication, an unbounded message is an unbounded bill.
-     *
-     * @param message the user's turn
-     */
-    public record ChatRequest(
-            @NotBlank(message = "message must not be blank")
-            @Size(max = MAX_MESSAGE_LENGTH, message = "message is too long")
-            String message) {
-    }
-
-    /**
-     * The assistant's answer, already resolved: any tool calls the model made against Solr MCP
-     * happened before this was built, so the content is final text and never a pending tool call.
-     *
-     * @param content the assistant's answer
-     */
-    public record ChatReply(String content) {
     }
 }

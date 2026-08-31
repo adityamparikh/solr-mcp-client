@@ -155,7 +155,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void rejectsAnOversizedMessage() throws Exception {
-        String tooLong = "x".repeat(SolrAssistantController.MAX_MESSAGE_LENGTH + 1);
+        String tooLong = "x".repeat(SolrAssistant.MAX_MESSAGE_LENGTH + 1);
 
         mockMvc.perform(post("/api/v1/chat").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -178,6 +178,18 @@ class SolrAssistantControllerTest {
     void reportsAFailedServiceTokenAsBadGatewayWithoutLeakingTheCause() throws Exception {
         given(assistant.ask(anyString(), anyString())).willThrow(new OAuth2AuthorizationException(
                 new OAuth2Error("invalid_client", "bad secret for https://idp.internal/token", null)));
+
+        mockMvc.perform(chat("/api/v1/chat"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.detail").value("The Solr assistant could not complete the request."));
+    }
+
+    @Test
+    void reportsAnEmptyModelAnswerAsBadGateway() throws Exception {
+        // ChatClient reports "completed with no content" as a null body. It must surface as an
+        // upstream failure, not as a 200 carrying {"content": null}.
+        given(assistant.ask(anyString(), anyString())).willThrow(
+                new SolrAssistant.EmptyAnswerException("The chat model returned no content for conversation c-1"));
 
         mockMvc.perform(chat("/api/v1/chat"))
                 .andExpect(status().isBadGateway())

@@ -16,6 +16,8 @@
  */
 package org.apache.solr.mcp.client.assistant;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
@@ -28,9 +30,21 @@ import org.springframework.stereotype.Service;
  * Hilla, a CLI runner) injects this bean directly rather than calling the application's own HTTP
  * endpoints. Keeping the chat client, memory scoping and MCP tools here means adding a UI
  * duplicates none of that wiring.
+ *
+ * <p>{@link ChatRequest} and {@link ChatReply} are the assistant's own vocabulary rather than the
+ * REST facade's, for the same reason: an adapter should map its transport onto these types, not
+ * define a parallel pair of its own that has to be kept in step. Their constraints therefore hold
+ * for every adapter, including one that never speaks HTTP.
  */
 @Service
 public class SolrAssistant {
+
+    /**
+     * A ceiling on the user's turn, enforced for every adapter rather than at one transport's
+     * edge: this application performs no inbound authentication, so an unbounded message is an
+     * unbounded bill. It is this application's guard, not a limit any model imposes.
+     */
+    public static final int MAX_MESSAGE_LENGTH = 8_000;
 
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
@@ -60,13 +74,24 @@ public class SolrAssistant {
      *                       conversation rather than failing
      * @param message        the user's turn
      * @return the model's answer, with any tool calls already resolved
+     * @throws EmptyAnswerException if the model completed without producing any content, which
+     *                              {@code ChatClient} reports as a null body
      */
     public String ask(String conversationId, String message) {
-        return chatClient.prompt()
+        String answer = chatClient.prompt()
                 .user(message)
                 .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
                 .call()
                 .content();
+
+        // ChatClient declares content() @Nullable. Returning it unchecked would make this method's
+        // own non-null contract a lie under @NullMarked, and the null would surface to a caller as
+        // an answer of {"content": null} rather than as the upstream failure it is.
+        if (answer == null) {
+            throw new EmptyAnswerException(
+                    "The chat model returned no content for conversation " + conversationId);
+        }
+        return answer;
     }
 
     /**
@@ -78,5 +103,47 @@ public class SolrAssistant {
      */
     public void forget(String conversationId) {
         chatMemory.clear(conversationId);
+    }
+
+    /**
+     * The user's turn, and nothing else.
+     *
+     * <p>The conversation it belongs to is passed alongside it, never carried in this record: it is
+     * ambient session context rather than part of what the user asked. How an adapter transports
+     * that id is the adapter's business — the REST facade uses a header.
+     *
+     * @param message the user's turn
+     */
+    public record ChatRequest(
+            @NotBlank(message = "message must not be blank")
+            @Size(max = MAX_MESSAGE_LENGTH, message = "message is too long")
+            String message) {
+    }
+
+    /**
+     * The assistant's answer, already resolved: any tool calls the model made against Solr MCP
+     * happened before this was built, so the content is final text and never a pending tool call.
+     *
+     * @param content the assistant's answer
+     */
+    public record ChatReply(String content) {
+    }
+
+    /**
+     * The model completed without producing any content.
+     *
+     * <p>A named type rather than a bare {@link IllegalStateException} so that an adapter can map
+     * this condition on its own: the REST facade reports it as a 502, and catching the supertype
+     * there would also capture Spring's own {@code IllegalStateException} for an unparseable API
+     * version — a client error that must not be reported as an upstream one.
+     */
+    public static class EmptyAnswerException extends IllegalStateException {
+
+        /**
+         * @param message describes the conversation whose exchange produced no content
+         */
+        public EmptyAnswerException(String message) {
+            super(message);
+        }
     }
 }

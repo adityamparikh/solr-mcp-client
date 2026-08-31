@@ -18,6 +18,7 @@ package org.apache.solr.mcp.client.web;
 
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpTransportException;
+import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.model.tool.ToolCallLimitExceededException;
@@ -34,6 +35,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +65,7 @@ class ProblemDetailExceptionHandler {
     ProblemDetail handleInvalidBody(MethodArgumentNotValidException exception) {
         String detail = exception.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
+                .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.joining("; "));
         return badRequest(detail);
@@ -78,6 +81,7 @@ class ProblemDetailExceptionHandler {
         String detail = exception.getParameterValidationResults().stream()
                 .flatMap(result -> result.getResolvableErrors().stream())
                 .map(MessageSourceResolvable::getDefaultMessage)
+                .filter(Objects::nonNull)
                 .distinct()
                 .collect(Collectors.joining("; "));
         return badRequest(detail);
@@ -93,9 +97,16 @@ class ProblemDetailExceptionHandler {
     /**
      * Non-retryable upstream conditions: a rejected model request, an MCP protocol or tool error,
      * a tool-call loop that hit its ceiling, or a service token that could not be obtained.
+     *
+     * <p>{@link SolrAssistant.EmptyAnswerException} joins them because a model that completes
+     * without content has produced an upstream answer this application cannot use. Catching that
+     * exact type rather than its {@code IllegalStateException} supertype is deliberate: Spring
+     * raises a bare {@code IllegalStateException} for an unparseable API version segment, which
+     * must stay a 400 about the request rather than becoming a 502 about the upstream.
      */
     @ExceptionHandler({RestClientException.class, McpError.class, ToolExecutionException.class,
-            ToolCallLimitExceededException.class, OAuth2AuthorizationException.class})
+            ToolCallLimitExceededException.class, OAuth2AuthorizationException.class,
+            SolrAssistant.EmptyAnswerException.class})
     ProblemDetail handleUpstreamFailure(RuntimeException exception) {
         log.error("Upstream failure serving a chat request", exception);
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, FAILED_DETAIL);

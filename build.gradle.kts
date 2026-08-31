@@ -21,6 +21,7 @@ repositories {
 }
 
 dependencies {
+    implementation(libs.jspecify)
     implementation(libs.spring.boot.actuator)
     implementation(libs.spring.boot.opentelemetry)
     implementation(libs.spring.boot.webmvc)
