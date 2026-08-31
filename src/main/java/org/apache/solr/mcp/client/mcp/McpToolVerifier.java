@@ -66,8 +66,8 @@ class McpToolVerifier implements InitializingBean {
             throw new IllegalStateException("""
                     The Solr MCP server offers no tools, so the assistant has nothing to call. \
                     Either no MCP connection is configured — activate the 'mcp-stdio' profile (the \
-                    default) or 'mcp-http' — or the connected process is not the Apache Solr MCP \
-                    server.""");
+                    default), 'mcp-stdio-docker' or 'mcp-http' — or the connected process is not \
+                    the Apache Solr MCP server.""");
         }
 
         SortedSet<String> missing = new TreeSet<>(expectedTools);

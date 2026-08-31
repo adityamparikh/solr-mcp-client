@@ -8,7 +8,8 @@ interface does not have to embed Spring AI itself.
 This application is a REST service in **every** profile. Profiles select how it *reaches* Solr MCP,
 which is why both are prefixed `mcp-`:
 
-- `mcp-stdio` (default) launches a local Solr MCP server as a child process
+- `mcp-stdio` (default) launches a local Solr MCP server as a child process from a jar
+- `mcp-stdio-docker` launches that same server as a container over the same stdio transport
 - `mcp-http` connects to a remote Solr MCP over Streamable HTTP, authenticated with an OAuth2
   client-credentials service token
 
@@ -40,9 +41,9 @@ the parent environment through, inheriting only an allowlist (`PATH`, `HOME`, `H
 child. The `mcp-http` profile has no `SOLR_URL` and should never gain one: there the server is deployed
 independently and owns its own configuration.
 
-The trade-off is that this repository hardcodes two of the server's config keys (`SOLR_URL`,
-`SPRING_PROFILES_ACTIVE`); if the server renames one, this client breaks quietly. To move that
-ownership out of the codebase entirely, point
+The server's profile is not passed at all — it defaults to `stdio` on its own — so `SOLR_URL` is the
+single config key of the server's that this repository hardcodes; if the server renames it, this
+client breaks quietly. To move that ownership out of the codebase entirely, point
 `spring.ai.mcp.client.stdio.servers-configuration` at an operator-owned JSON file describing the
 launch. Note that inline `connections` entries win over file entries with the same key, so the
 `solr-mcp` connection above must be removed for a file to take effect.
@@ -50,23 +51,109 @@ launch. Note that inline `connections` entries win over file entries with the sa
 `SOLR_MCP_COMMAND` overrides the JVM used to launch the server (default `java`; an absolute path is
 safer, because the MCP SDK filters the child process environment).
 
+## Run with mcp-stdio-docker (local server as a container)
+
+Same stdio transport, container instead of a jar. The server publishes no registry image yet, so
+build one in your Solr MCP checkout first:
+
+```bash
+./gradlew jibDockerBuild            # produces solr-mcp:latest
+```
+
+Then:
+
+```bash
+export OPENAI_API_KEY=...          # or ANTHROPIC_API_KEY
+./gradlew bootRun --args='--spring.profiles.active=mcp-stdio-docker'
+```
+
+`SOLR_URL` defaults to `http://host.docker.internal:8983/solr/` and `SOLR_MCP_IMAGE` to
+`solr-mcp:latest`; the AOT-pinned native build, tagged `solr-mcp:latest-native-stdio`, works here
+too. `SOLR_MCP_DOCKER_COMMAND` overrides the `docker` executable — an absolute path such as
+`/usr/local/bin/docker` is safer, since the MCP SDK hands the child only an allowlisted environment.
+
+### Why this is a profile and not a `SOLR_MCP_ARGS` override
+
+Two differences make a shared launcher misleading rather than merely verbose:
+
+- **`env:` cannot reach a container.** The MCP Java SDK applies that map to the child *process*,
+  which here is the `docker` CLI. Container settings therefore have to be `-e` flags inside `args`;
+  an `env:` block would sit in the configuration looking meaningful while doing nothing.
+- **`SOLR_URL` needs a different value.** Inside a container `localhost` is the container, so Solr
+  on the host is `host.docker.internal`. One profile cannot default that correctly for both
+  launchers.
+
+The profile passes `--add-host=host.docker.internal:host-gateway`, which defines that name on Linux
+and is a harmless no-op on Docker Desktop, so the same configuration works on both.
+
+For a launch neither profile anticipates — podman, extra mounts, a wrapper script — point
+`spring.ai.mcp.client.stdio.servers-configuration` at an operator-owned JSON file instead. Inline
+`connections` entries win over file entries with the same key, so the profile's `solr-mcp`
+connection must not be active when you do.
+
 ## Run with mcp-http (remote server)
 
 The `mcp-http` profile obtains a dedicated OAuth2 client-credentials token and attaches it to every
 outbound MCP request. It never forwards an API caller's token.
 
+Every connection value defaults to the local development stack — a Solr MCP server on
+`http://localhost:8080` and Keycloak on `http://localhost:8180` — so only the secret has to be
+exported to run against it:
+
 ```bash
 export OPENAI_API_KEY=...          # or ANTHROPIC_API_KEY
+export SOLR_MCP_OAUTH_CLIENT_SECRET=...
+./gradlew bootRun --args='--spring.profiles.active=mcp-http'
+```
+
+Against a deployed server, override the rest:
+
+```bash
 export SOLR_MCP_HTTP_URL=https://solr-mcp.example.com
 export SOLR_MCP_OAUTH_TOKEN_URI=https://idp.example.com/oauth/token
 export SOLR_MCP_OAUTH_CLIENT_ID=...
 export SOLR_MCP_OAUTH_CLIENT_SECRET=...
 export SOLR_MCP_OAUTH_SCOPES=solr-mcp.read
-./gradlew bootRun --args='--spring.profiles.active=mcp-http'
 ```
 
-Configure the identity provider to issue a JWT whose `aud` is Solr MCP's `/mcp` resource, as that
-server's OAuth2 resource server requires.
+### The audience claim is not optional
+
+Solr MCP runs its resource server with `validateAudienceClaim(true)`, so it rejects any token whose
+`aud` does not contain its canonical resource URI. Read that URI from the server itself rather than
+assuming it:
+
+```bash
+curl -s http://localhost:8080/.well-known/oauth-protected-resource
+# {"resource":"http://localhost:8080/mcp","authorization_servers":["http://localhost:8180/realms/solr-mcp"],...}
+```
+
+Keycloak does not yet honour the RFC 8707 `resource=` parameter, so the claim has to be stamped on
+by an **Audience** protocol mapper on the client used here — otherwise the token is issued normally
+and then refused with 401:
+
+```bash
+KC=http://localhost:8180
+ADMIN_TOKEN=$(curl -s -X POST "$KC/realms/master/protocol/openid-connect/token" \
+  -d client_id=admin-cli -d username=admin -d password=admin -d grant_type=password | jq -r .access_token)
+CLIENT_UUID=$(curl -s "$KC/admin/realms/solr-mcp/clients?clientId=solr-mcp-server" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+
+curl -s -X POST "$KC/admin/realms/solr-mcp/clients/$CLIENT_UUID/protocol-mappers/models" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{
+        "name": "mcp-audience",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "config": {
+          "included.custom.audience": "http://localhost:8080/mcp",
+          "access.token.claim": "true",
+          "id.token.claim": "false"
+        }
+      }'
+```
+
+The IdP client must also be confidential with service accounts enabled; a public client cannot use
+the `client_credentials` grant at all.
 
 The token is fetched with `AuthorizedClientServiceOAuth2AuthorizedClientManager`, not the
 request-scoped default: the MCP client also talks to the server outside any HTTP request (during

@@ -13,9 +13,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Verifies the default {@code mcp-stdio} wiring without launching the Solr MCP server: the client is
  * left uninitialized, so the transport binds but never spawns the child process.
  *
- * <p>The environment assertion is deliberate — the child is a Spring Boot application and reads
- * {@code SPRING_PROFILES_ACTIVE}; an earlier revision passed {@code PROFILES}, which that process
- * silently ignores.
+ * <p>The environment assertions are deliberate. {@code SOLR_URL} has to be declared because the SDK
+ * hands the child only an allowlisted environment, so a value exported in the operator's shell never
+ * reaches it. No profile is declared: the server already defaults to {@code stdio}, so naming it
+ * would add a second server-owned key for no behaviour. An earlier revision passed {@code PROFILES},
+ * which Spring itself ignores — the fix is to pass neither.
  */
 @SpringBootTest(properties = {
         "spring.ai.mcp.client.initialized=false",
@@ -46,12 +48,19 @@ class McpStdioTransportWiringTest {
     }
 
     @Test
-    void passesSolrCoordinatesAndTheProfileTheChildProcessActuallyReads() {
+    void passesTheSolrCoordinatesTheChildCannotInherit() {
         var parameters = stdioProperties.toServerParameters().get("solr-mcp");
 
         assertThat(parameters.getEnv())
-                .containsEntry("SOLR_URL", "http://solr.example.com:8983/solr/")
-                .containsEntry("SPRING_PROFILES_ACTIVE", "stdio")
+                .containsEntry("SOLR_URL", "http://solr.example.com:8983/solr/");
+    }
+
+    @Test
+    void leavesTheServerProfileToTheServersOwnDefault() {
+        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+
+        assertThat(parameters.getEnv())
+                .doesNotContainKey("SPRING_PROFILES_ACTIVE")
                 .doesNotContainKey("PROFILES");
     }
 }

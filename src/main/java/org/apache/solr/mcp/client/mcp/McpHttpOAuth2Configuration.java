@@ -53,7 +53,7 @@ class McpHttpOAuth2Configuration {
                     .withClientRegistrationId(REGISTRATION_ID)
                     .principal(PRINCIPAL)
                     .build());
-            if (client == null || client.getAccessToken() == null) {
+            if (client == null) {
                 throw new IllegalStateException("Unable to obtain an OAuth2 access token for Solr MCP");
             }
             request.header(HttpHeaders.AUTHORIZATION, "Bearer " + client.getAccessToken().getTokenValue());

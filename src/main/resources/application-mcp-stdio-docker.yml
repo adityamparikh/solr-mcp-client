@@ -1,0 +1,42 @@
+# Same transport as mcp-stdio — the server is a child process speaking JSON-RPC over stdin/stdout —
+# but launched as a container instead of a jar. It is a separate profile rather than an overridable
+# argv because the two launchers differ in more than the command:
+#
+#   * Nothing in `env:` can reach the server here. The MCP Java SDK applies that map to the child
+#     process, which under this profile is the `docker` CLI, not the container. Container settings
+#     therefore travel as `-e` flags inside `args`, and an `env:` block would look meaningful while
+#     doing nothing.
+#   * SOLR_URL needs a different value. `localhost` inside a container is the container, so Solr on
+#     the host is reachable as host.docker.internal. `--add-host` supplies that name on Linux, where
+#     Docker does not define it; on Docker Desktop it is already defined and the flag is harmless.
+#
+# Build the image first — the server publishes no registry image yet:
+#   cd <solr-mcp checkout> && ./gradlew jibDockerBuild
+spring:
+  ai:
+    mcp:
+      client:
+        stdio:
+          connections:
+            solr-mcp:
+              # An absolute path is safer than a bare name: the MCP SDK passes only an allowlisted
+              # environment to the child, so `docker` has to be resolvable from the inherited PATH.
+              command: ${SOLR_MCP_DOCKER_COMMAND:docker}
+              args:
+                - run
+                # -i keeps stdin open. Without it the container gets EOF immediately and the
+                # transport dies before the first JSON-RPC message.
+                - "-i"
+                - "--rm"
+                - "--add-host=host.docker.internal:host-gateway"
+                - "-e"
+                - "SOLR_URL=${SOLR_URL:http://host.docker.internal:8983/solr/}"
+                # No profile is passed, unlike mcp-stdio. The server already defaults to stdio
+                # (spring.profiles.active=${PROFILES:stdio}) and every published image bakes that
+                # profile in, so a flag here would only add a second server-owned key to keep in
+                # step. It would not help the one image that differs either: the http native build
+                # AOT-pins its web-application-type, so no runtime variable makes it speak stdio.
+                #
+                # The JVM image built by `jibDockerBuild`. The AOT-pinned native build is tagged
+                # solr-mcp:latest-native-stdio and works here too.
+                - "${SOLR_MCP_IMAGE:solr-mcp:latest}"

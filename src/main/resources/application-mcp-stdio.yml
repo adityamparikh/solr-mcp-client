@@ -12,13 +12,14 @@ spring:
               args:
                 - -jar
                 - ${SOLR_MCP_JAR}
-              # These are the SERVER's settings, not this client's. They must be declared here
-              # because the MCP SDK does not pass the parent environment through: it inherits only
-              # an allowlist (PATH, HOME, HOMEDRIVE, HOMEPATH, USERNAME), so a SOLR_URL exported in
+              # This is the SERVER's setting, not this client's. It must be declared here because
+              # the MCP SDK does not pass the parent environment through: it inherits only an
+              # allowlist (PATH, HOME, HOMEDRIVE, HOMEPATH, USERNAME), so a SOLR_URL exported in
               # the operator's shell would silently never reach the child.
-              # In the mcp-http profile these are absent by design — a remote server owns its own config.
+              # In the mcp-http profile it is absent by design — a remote server owns its own config.
+              #
+              # The server's profile is deliberately not passed: it defaults to stdio on its own
+              # (spring.profiles.active=${PROFILES:stdio}), and naming it here would only add a
+              # second server-owned key that breaks quietly if the server renames it.
               env:
                 SOLR_URL: ${SOLR_URL:http://localhost:8983/solr/}
-                # The SERVER's profile, in the server's own naming — unrelated to this
-                # application's mcp-stdio / mcp-http profiles.
-                SPRING_PROFILES_ACTIVE: stdio

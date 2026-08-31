@@ -79,8 +79,13 @@ shared `config` or `service` package.
   is a REST service in every profile. Hence the `mcp-` prefix. Do not add a profile that changes the
   web layer.
 - `mcp-stdio` is the default and launches the local Solr MCP process. `SOLR_MCP_JAR` must be an
-  absolute path. The child is a Spring Boot app: pass `SPRING_PROFILES_ACTIVE` (the *server's*
-  profile, unrelated to ours), not `PROFILES`.
+  absolute path. Pass the child only what it cannot default or inherit: `SOLR_URL`, which the SDK's
+  environment allowlist would otherwise drop. Do not name the server's profile — it defaults to
+  `stdio` — and note that `PROFILES` is the server's own placeholder, not something Spring reads.
+- `mcp-stdio-docker` is the same transport with a container as the child. It exists as its own
+  profile because `env:` cannot reach a container — the SDK applies that map to the `docker` CLI —
+  so container settings are `-e` flags in `args`, and because `SOLR_URL` must name
+  `host.docker.internal` rather than `localhost`. Keep the two profiles in step when either changes.
 - `mcp-http` connects over Streamable HTTP with OAuth2 client credentials. It must use a dedicated
   service token — never forward a REST caller's token.
 - Exactly one model provider key may be set unless `spring.ai.model.chat` names the provider;
