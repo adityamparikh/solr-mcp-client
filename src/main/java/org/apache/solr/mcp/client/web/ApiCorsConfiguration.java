@@ -45,13 +45,20 @@ class ApiCorsConfiguration implements WebMvcConfigurer {
 
     private final Set<String> allowedOrigins;
 
-    // Split explicitly rather than binding straight to a collection: @Value collection conversion
-    // depends on Boot's ApplicationConversionService being present, so it silently yields a single
-    // element in contexts that lack it.
+    /**
+     * Splits explicitly rather than binding straight to a collection: {@code @Value} collection
+     * conversion depends on Boot's {@code ApplicationConversionService} being present, so it
+     * silently yields a single element in contexts that lack it.
+     */
     ApiCorsConfiguration(@Value("${solr.mcp.client.cors.allowed-origins:}") String allowedOrigins) {
         this.allowedOrigins = StringUtils.commaDelimitedListToSet(allowedOrigins);
     }
 
+    /**
+     * Registers nothing at all when no origins are configured — the API is then same-origin
+     * only. An empty registration would not mean "no cross-origin access"; an unqualified
+     * mapping defaults to allowing every origin.
+     */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         if (allowedOrigins.isEmpty()) {

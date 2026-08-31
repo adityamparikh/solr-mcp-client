@@ -125,6 +125,10 @@ public class SolrAssistant {
      */
     public static class EmptyAnswerException extends IllegalStateException {
 
+        /**
+         * @param message names the conversation for the server-side log; the REST facade never
+         *                returns it to the caller, reporting a generic 502 detail instead
+         */
         public EmptyAnswerException(String message) {
             super(message);
         }

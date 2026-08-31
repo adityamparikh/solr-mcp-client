@@ -58,6 +58,11 @@ class McpHttpOAuth2Configuration {
      */
     static final String REGISTRATION_ID = "solr-mcp";
 
+    /**
+     * The request-free manager for the {@code client_credentials} flow; the class Javadoc covers
+     * why Spring Security's default request-bound manager cannot serve here. Only the
+     * client-credentials provider is registered, so no other grant can be triggered by accident.
+     */
     @Bean
     AuthorizedClientServiceOAuth2AuthorizedClientManager mcpAuthorizedClientManager(
             ClientRegistrationRepository clientRegistrationRepository,
@@ -69,6 +74,12 @@ class McpHttpOAuth2Configuration {
         return manager;
     }
 
+    /**
+     * Attaches the service token to every outbound Solr MCP request. Declared as a
+     * {@link McpClientCustomizer} deliberately: that is the type the library's auto-configuration
+     * guards with {@code @ConditionalOnMissingBean}, so this bean is also what suppresses the
+     * user-bound authorization-code default described in the class Javadoc.
+     */
     @Bean
     McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> solrMcpBearerTokenCustomizer(
             AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager) {

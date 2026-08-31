@@ -40,6 +40,11 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration(proxyBeanMethods = false)
 class InboundSecurityConfiguration {
 
+    /**
+     * Permits every request, per the class contract. Declaring the chain explicitly rather than
+     * leaving Boot's default is the point: the default chain would demand authentication the
+     * moment Spring Security landed on the classpath for the outbound OAuth2 support.
+     */
     @Bean
     SecurityFilterChain inboundSecurityFilterChain(HttpSecurity http) {
         return http

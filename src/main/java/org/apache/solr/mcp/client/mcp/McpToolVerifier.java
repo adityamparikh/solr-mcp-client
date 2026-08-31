@@ -62,13 +62,21 @@ class McpToolVerifier {
 
     private final ObjectProvider<ToolCallbackProvider> toolCallbacks;
 
-    // The provider is injected as an ObjectProvider because "no ToolCallbackProvider bean at all"
-    // is one of the conditions this class exists to report; a hard dependency would turn it into an
-    // opaque context-startup failure instead.
+    /**
+     * The provider is injected as an {@link ObjectProvider} because "no
+     * {@code ToolCallbackProvider} bean at all" is one of the conditions this class exists to
+     * report; a hard dependency would turn it into an opaque context-startup failure instead.
+     */
     McpToolVerifier(ObjectProvider<ToolCallbackProvider> toolCallbacks) {
         this.toolCallbacks = toolCallbacks;
     }
 
+    /**
+     * Runs once this bean's own dependencies are ready; throwing here aborts context startup,
+     * which is the intended failure mode — a broken MCP connection must never become a running
+     * application. On success the exposed tool names are logged, since those prefixed names are
+     * what an operator needs and nothing else reports them.
+     */
     @PostConstruct
     void verifyToolsAvailable() {
         SortedSet<String> available = availableToolNames();
@@ -83,6 +91,11 @@ class McpToolVerifier {
         log.info("Solr MCP server exposes {} tools: {}", available.size(), available);
     }
 
+    /**
+     * Sorted so the logged list and any failure report read stably across restarts. A missing
+     * provider bean collapses into the same empty result as a toolless server, because the two
+     * conditions warrant the same diagnosis.
+     */
     private SortedSet<String> availableToolNames() {
         ToolCallbackProvider provider = toolCallbacks.getIfAvailable();
         if (provider == null) {
