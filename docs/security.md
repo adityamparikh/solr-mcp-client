@@ -13,8 +13,9 @@
 
 **Deploy this service behind the hosting application's security boundary. Never expose it
 directly.** The chat endpoint, the actuator endpoints (`/actuator/health`, `/actuator/info`) and the
-OpenAPI endpoints are all open on the same terms. `OpenApiConfiguration` deliberately declares no
-security scheme, so generated clients are not told about protection that does not exist.
+OpenAPI endpoints are all open on the same terms. The OpenAPI document (its `Info` block binds from
+`springdoc.open-api` in `application.yml`) deliberately declares no security scheme, so generated
+clients are not told about protection that does not exist.
 
 Because there is no inbound authentication, two other decisions follow from it and should not be
 "tidied up" independently: there is no shared default conversation id (it would merge unrelated

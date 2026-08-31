@@ -18,7 +18,6 @@ package org.apache.solr.mcp.client.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.swagger.v3.oas.models.OpenAPI;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.mcp.customizer.McpClientCustomizer;
@@ -101,13 +100,18 @@ class McpHttpTransportWiringTest {
 
     @Test
     void documentsTheApi() throws Exception {
-        assertThat(context.getBean(OpenAPI.class).getInfo().getTitle()).isEqualTo("solr-mcp-client");
-
-        // springdoc resolves the {version} template to the declared version rather than leaking
-        // it as a path parameter, so the document describes a concrete, callable URL.
         String document = mockMvc.perform(get("/api-docs"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
+
+        // The Info block binds from springdoc.open-api.info in application.yml — there is no
+        // OpenAPI bean to inspect, so the served document is the thing to assert on.
+        JsonNode info = new ObjectMapper().readTree(document).at("/info");
+        assertThat(info.at("/title").asText()).isEqualTo("solr-mcp-client");
+        assertThat(info.at("/license/name").asText()).isEqualTo("Apache-2.0");
+
+        // springdoc resolves the {version} template to the declared version rather than leaking
+        // it as a path parameter, so the document describes a concrete, callable URL.
         assertThat(document).contains("/api/v1/chat").doesNotContain("{version}");
     }
 
