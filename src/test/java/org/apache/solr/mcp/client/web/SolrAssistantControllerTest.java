@@ -41,6 +41,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -157,6 +158,9 @@ class SolrAssistantControllerTest {
                         .content("""
                                 {"message":""}"""))
                 .andExpect(status().isBadRequest())
+                // The OpenAPI document advertises application/problem+json for every error; this
+                // pins the runtime to it so the two cannot drift.
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("message must not be blank"));
     }
 
@@ -167,6 +171,7 @@ class SolrAssistantControllerTest {
 
         mockMvc.perform(chat("/api/v1/chat"))
                 .andExpect(status().isGatewayTimeout())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("The Solr assistant is temporarily unavailable. Please retry."));
     }
 
