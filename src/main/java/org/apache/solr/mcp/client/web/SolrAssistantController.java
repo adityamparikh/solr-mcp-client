@@ -25,10 +25,8 @@ import jakarta.validation.constraints.NotBlank;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
-import org.jspecify.annotations.Nullable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,8 +34,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.UUID;
 
 /**
  * Transport-only REST facade over {@link SolrAssistant}.
@@ -72,6 +68,21 @@ public class SolrAssistantController {
     /** Matched semantically, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach it. */
     static final String V1 = "v1";
 
+    /**
+     * Default for the conversation header, so an absent header arrives as a fresh id instead of as
+     * a {@code null} the handler has to substitute for. Spring re-evaluates a {@code #{...}}
+     * default on every argument resolution — it caches the parsed expression, not its result — so
+     * this yields a distinct id per request rather than one frozen at startup. Evaluating it needs
+     * a bean factory, so it works under an application context but not under
+     * {@code MockMvcBuilders.standaloneSetup}, where the expression would reach the handler as
+     * literal text.
+     *
+     * <p>A default only fires when the header is absent, never when it is present but empty, hence
+     * the {@link NotBlank} beside it: without that, a blank header would name the shared
+     * {@code ""} conversation this facade deliberately does not have.
+     */
+    static final String NEW_CONVERSATION_ID = "#{T(java.util.UUID).randomUUID().toString()}";
+
     private final SolrAssistant assistant;
 
     /**
@@ -98,16 +109,14 @@ public class SolrAssistantController {
     @ApiResponse(responseCode = "504", description = "The chat model or Solr MCP server did not respond in time")
     ResponseEntity<ChatReply> chat(
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
-            @RequestHeader(name = CONVERSATION_ID_HEADER, required = false)
-            @Nullable String conversationId,
+            @RequestHeader(name = CONVERSATION_ID_HEADER, defaultValue = NEW_CONVERSATION_ID)
+            @NotBlank(message = "conversationId must not be blank")
+            String conversationId,
             @Valid @RequestBody ChatRequest request) {
 
-        String conversation = StringUtils.hasText(conversationId)
-                ? conversationId
-                : UUID.randomUUID().toString();
         return ResponseEntity.ok()
-                .header(CONVERSATION_ID_HEADER, conversation)
-                .body(assistant.ask(conversation, request));
+                .header(CONVERSATION_ID_HEADER, conversationId)
+                .body(assistant.ask(conversationId, request));
     }
 
     @DeleteMapping(path = "/chat/{conversationId}", version = V1)
