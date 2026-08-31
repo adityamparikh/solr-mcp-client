@@ -133,8 +133,11 @@ shared `config` or `service` package.
   misconfiguration fails at startup rather than on the first request.
 - `McpToolVerifier` fails startup unless the Solr MCP server offers tools. Listing them answers
   "is a connection configured" and "is this the right server" in one step, so do not add a separate
-  connection check. It skips when `spring.ai.mcp.client.initialized` is false, since disabled
-  clients have nothing to list.
+  connection check. Verification is unconditional — no property turns it off, because an assistant
+  with nothing to call is never a state worth starting in. Listing the tools is what first drives
+  Spring AI's `LifecycleInitializer`, so the check connects even when
+  `spring.ai.mcp.client.initialized` is false: that property defers connecting, and verifying
+  necessarily undoes the deferral. A context that must not reach a server replaces the bean.
 - Never bind a comma-separated property straight to a `List`/`Set` with `@Value`. That conversion
   needs Boot's `ApplicationConversionService`, so it silently yields one element in contexts that
   lack it (a bare `ApplicationContextRunner`, for one). Bind a `String` and split it with
@@ -158,7 +161,9 @@ shared `config` or `service` package.
 - Use `@WebMvcTest` with `@MockitoBean` for REST contracts, plain unit tests for `SolrAssistant` and
   the config classes, and `@SpringBootTest` for wiring that only fails in a real context.
 - Context tests set `spring.ai.mcp.client.initialized=false` so the transport binds without
-  launching a child process or opening a network connection.
+  launching a child process or opening a network connection, and replace `McpToolVerifier` with
+  `@MockitoBean`. The property alone is not enough: verification lists the server's tools, which
+  drives Spring AI's `LifecycleInitializer` and opens the connection the property deferred.
 - Do not require a live Solr, MCP server, OpenAI account or identity provider for ordinary runs.
 - When stubbing a `ChatModel` for a tool-calling test, `getOptions()` must return
   `ToolCallingChatOptions`, not `ChatOptions.builder().build()`. `ToolCallingAdvisor.adviseCall`

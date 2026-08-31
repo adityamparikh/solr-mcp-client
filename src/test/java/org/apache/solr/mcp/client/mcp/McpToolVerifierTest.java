@@ -24,7 +24,6 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 
 class McpToolVerifierTest {
@@ -61,17 +60,17 @@ class McpToolVerifierTest {
     }
 
     @Test
-    void staysQuietWhenTheClientsWereToldNotToInitialize() {
-        ToolCallbackProvider untouched = mock(ToolCallbackProvider.class);
-
-        // Listing tools requires a live connection. With initialization disabled there is nothing
-        // to list, so silence proves nothing and must not be read as failure.
-        runner.withBean(ToolCallbackProvider.class, () -> untouched)
+    void verifiesEvenWhenTheClientsWereToldNotToInitialize() {
+        // Verification is unconditional, and this is the edge that proves it. The property defers
+        // connecting; listing the tools is what undoes the deferral. A context that genuinely must
+        // not reach a server replaces this bean instead of setting the property.
+        runner.withBean(ToolCallbackProvider.class, () -> provider())
                 .withPropertyValues("spring.ai.mcp.client.initialized=false")
-                .run(context -> {
-                    assertThat(context).hasNotFailed();
-                    then(untouched).shouldHaveNoInteractions();
-                });
+                .run(context -> assertThat(context).hasFailed()
+                        .getFailure()
+                        .rootCause()
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("offers no tools"));
     }
 
     private static ToolCallbackProvider provider(String... names) {

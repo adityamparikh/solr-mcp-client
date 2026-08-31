@@ -460,9 +460,13 @@ neither it nor the server owns, and would need revising whenever the server adds
 What an operator actually needs is the names the server exposes — which is why the successful path
 logs them.
 
-Verification is skipped when `spring.ai.mcp.client.initialized=false`: the clients have been told
-not to connect, so there is nothing to list and nothing to conclude from silence. (Tests use this to
-bind the transport without spawning a child process or opening a socket.)
+Verification is **unconditional**: no property turns it off, because an assistant with nothing to
+call is never a state worth starting in. One consequence is worth knowing before changing anything
+here — listing the tools is what first drives Spring AI's `LifecycleInitializer`, so the check
+connects even when `spring.ai.mcp.client.initialized=false`. That property defers the connection,
+and verifying necessarily undoes the deferral. A context that must not reach a server therefore has
+to replace this bean rather than set that property; the transport wiring tests use `@MockitoBean`
+for exactly that.
 
 ---
 
@@ -825,8 +829,9 @@ packaging; JaCoCo enforces coverage (excluding the application class) and feeds 
 
 Tests never require a live Solr, MCP server, model account or identity provider: context tests set
 `spring.ai.mcp.client.initialized=false` so transports bind without launching a child process or
-opening a connection, and web slice tests pin `spring.ai.model.chat` so they do not depend on which
-API keys a developer happens to have exported.
+opening a connection — replacing `McpToolVerifier` with `@MockitoBean`, since verifying would open
+that connection anyway — and web slice tests pin `spring.ai.model.chat` so they do not depend on
+which API keys a developer happens to have exported.
 
 See [AGENTS.md](AGENTS.md) for the wiring rules and conventions this codebase holds itself to.
 

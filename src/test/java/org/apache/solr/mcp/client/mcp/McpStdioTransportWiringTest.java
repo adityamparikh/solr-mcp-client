@@ -22,13 +22,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the default {@code mcp-stdio} wiring without launching the Solr MCP server: the client is
- * left uninitialized, so the transport binds but never spawns the child process.
+ * left uninitialized, so the transport binds but never spawns the child process, and
+ * {@link McpToolVerifier} is replaced with a mock because listing the server's tools would open
+ * the very connection that property defers.
  *
  * <p>The environment assertions are deliberate. {@code SOLR_URL} has to be declared because the SDK
  * hands the child only an allowlisted environment, so a value exported in the operator's shell never
@@ -44,6 +47,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 @ActiveProfiles("mcp-stdio")
 class McpStdioTransportWiringTest {
+
+    // McpToolVerifier lists the server's tools, and listing them is what opens the connection this
+    // test exists to avoid: it drives Spring AI's LifecycleInitializer regardless of
+    // spring.ai.mcp.client.initialized. Replacing the bean keeps the context to pure wiring.
+    @MockitoBean
+    McpToolVerifier toolVerifier;
 
     @Autowired
     McpStdioClientProperties stdioProperties;

@@ -28,6 +28,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +55,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("mcp-http")
 class McpHttpTransportWiringTest {
+
+    // McpToolVerifier lists the server's tools, and listing them is what opens the connection this
+    // test exists to avoid: it drives Spring AI's LifecycleInitializer regardless of
+    // spring.ai.mcp.client.initialized. Replacing the bean keeps the context to pure wiring.
+    @MockitoBean
+    McpToolVerifier toolVerifier;
 
     @Autowired
     ApplicationContext context;
