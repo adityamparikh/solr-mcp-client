@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -48,7 +49,8 @@ class McpStdioDockerTransportWiringTest {
 
     @Test
     void launchesTheSolrMcpServerAsAContainerWithStdinHeldOpen() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getCommand()).isEqualTo("docker");
         assertThat(parameters.getArgs()).startsWith("run", "-i", "--rm");
@@ -57,7 +59,8 @@ class McpStdioDockerTransportWiringTest {
 
     @Test
     void passesSolrCoordinatesAsAContainerEnvironmentFlag() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getArgs())
                 .containsSequence("-e", "SOLR_URL=http://solr.example.com:8983/solr/");
@@ -70,21 +73,24 @@ class McpStdioDockerTransportWiringTest {
      */
     @Test
     void leavesTheServerProfileToTheImageAndTheServersOwnDefault() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getArgs()).noneMatch(arg -> arg.contains("SPRING_PROFILES_ACTIVE"));
     }
 
     @Test
     void resolvesTheHostAliasSoSolrOnTheHostIsReachableFromInsideTheContainer() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getArgs()).contains("--add-host=host.docker.internal:host-gateway");
     }
 
     @Test
     void leavesTheEnvMapEmptyBecauseItWouldReachTheDockerCliRatherThanTheContainer() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getEnv())
                 .doesNotContainKey("SOLR_URL")

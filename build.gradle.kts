@@ -1,3 +1,6 @@
+import net.ltgt.gradle.errorprone.CheckSeverity
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     java
     jacoco
@@ -5,6 +8,7 @@ plugins {
     alias(libs.plugins.spring.dependency.management)
     alias(libs.plugins.cyclonedx)
     alias(libs.plugins.sonarqube)
+    alias(libs.plugins.errorprone)
 }
 
 group = "org.apache.solr"
@@ -38,6 +42,25 @@ dependencies {
     testImplementation(libs.spring.boot.webmvc.test)
     testImplementation(libs.spring.security.test)
     testRuntimeOnly(libs.junit.platform.launcher)
+
+    errorprone(libs.error.prone.core)
+    errorprone(libs.nullaway)
+}
+
+// NullAway is the only Error Prone check this build enforces. Error Prone's own several hundred
+// checks are switched off rather than adopted silently: turning them on is a separate decision with
+// its own backlog, and leaving them at warning level would train everyone to ignore the output.
+//
+// OnlyNullMarked is preferred over AnnotatedPackages so that @NullMarked in package-info.java is the
+// single source of truth for what is checked. A package list here would be a second place to keep
+// in step, and a new package would silently go unchecked until someone remembered to add it.
+tasks.withType<JavaCompile>().configureEach {
+    options.errorprone {
+        disableAllChecks = true
+        check("NullAway", CheckSeverity.ERROR)
+        option("NullAway:OnlyNullMarked", "true")
+        option("NullAway:JSpecifyMode", "true")
+    }
 }
 
 dependencyManagement {

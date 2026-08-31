@@ -23,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfiles;
 
+import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -57,7 +58,8 @@ class McpStdioTransportWiringTest {
 
     @Test
     void launchesTheSolrMcpServerFromAnExplicitJarLocation() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getCommand()).isEqualTo("java");
         assertThat(parameters.getArgs()).containsExactly("-jar", "/opt/solr-mcp/solr-mcp.jar");
@@ -65,7 +67,8 @@ class McpStdioTransportWiringTest {
 
     @Test
     void passesTheSolrCoordinatesTheChildCannotInherit() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getEnv())
                 .containsEntry("SOLR_URL", "http://solr.example.com:8983/solr/");
@@ -73,7 +76,8 @@ class McpStdioTransportWiringTest {
 
     @Test
     void leavesTheServerProfileToTheServersOwnDefault() {
-        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+        var parameters = requireNonNull(stdioProperties.toServerParameters().get("solr-mcp"),
+                "the mcp-stdio profile should configure a 'solr-mcp' server");
 
         assertThat(parameters.getEnv())
                 .doesNotContainKey("SPRING_PROFILES_ACTIVE")

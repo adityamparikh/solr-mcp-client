@@ -28,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import static java.util.Objects.requireNonNull;
 import static org.apache.solr.mcp.client.web.SolrAssistantController.CONVERSATION_ID_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -219,7 +220,8 @@ class SolrAssistantControllerTest {
     }
 
     private String issuedConversationId() throws Exception {
-        return mockMvc.perform(chat("/api/v1/chat"))
-                .andReturn().getResponse().getHeader(CONVERSATION_ID_HEADER);
+        return requireNonNull(mockMvc.perform(chat("/api/v1/chat"))
+                .andReturn().getResponse().getHeader(CONVERSATION_ID_HEADER),
+                CONVERSATION_ID_HEADER + " should be echoed on every response");
     }
 }
