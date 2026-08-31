@@ -8,14 +8,57 @@ spring:
     # Solr MCP tools.
     default: mcp-stdio
   ai:
-    # Which provider is active is decided by ChatModelProviderSelector from the API keys present in
-    # the environment, before these auto-configurations are evaluated. API keys are not listed here:
-    # the selector copies OPENAI_API_KEY / ANTHROPIC_API_KEY into the property Spring AI reads, so a
-    # provider without a key is never activated.
+    # Which provider is active is not decided here, and not in code either: it is decided by which
+    # spring-ai-starter-model-* dependency is on the classpath. Exactly one is declared in
+    # build.gradle.kts (today spring-ai-anthropic), Spring AI auto-configures the single ChatModel
+    # it finds, and everything downstream sees only ChatClient. Switching providers means swapping
+    # that dependency and exporting the matching key — no property below selects anything.
+    #
+    # Both provider blocks are kept so that swap stays a one-line build change. The block for an
+    # absent starter is inert — nothing binds those properties, so its ${...} placeholders are
+    # never resolved and a missing key for the inactive provider cannot fail startup.
+    #
+    # Each key is bound at the level its own starter actually reads, which is NOT the same level for
+    # the two providers — the api-key sits under `chat:` for OpenAI but a level up for Anthropic:
+    #
+    #   OPENAI_API_KEY    -> spring.ai.openai.chat.api-key   (OpenAiChatProperties, a per-chat
+    #                        override of the common spring.ai.openai.api-key — both are bound)
+    #   ANTHROPIC_API_KEY -> spring.ai.anthropic.api-key     (AnthropicConnectionProperties, the
+    #                        ONLY api-key Anthropic binds — it has no chat.api-key)
+    #   OPENAI_MODEL      -> spring.ai.openai.chat.model
+    #   ANTHROPIC_MODEL   -> spring.ai.anthropic.chat.model
+    #
+    # The asymmetry is the whole point of writing it down: OpenAI exposes the key at both levels, so
+    # the wrong guess still works there and teaches the wrong lesson. Anthropic exposes it at one
+    # level only, and a key nested under `chat:` binds to nothing and is discarded in silence. This
+    # file had exactly that bug. Verify against the starter's spring-configuration-metadata.json
+    # before moving either key.
+    #
+    # The model keys are the flat form on purpose. Spring AI 2.0 flattened `.options.` away, so
+    # spring.ai.*.chat.options.model is the DEPRECATED spelling now — do not "correct" these back.
+    #
+    # The api-key placeholders default to empty rather than being left to fail unresolved: an
+    # unresolvable placeholder breaks every test that starts a context whenever the var is absent,
+    # including contexts that never build a ChatModel at all.
+    #
+    # The Anthropic placeholder falls back through ANTHROPIC_AUTH_TOKEN before defaulting to empty,
+    # and that nesting is load-bearing rather than decorative. With the var absent the placeholder
+    # binds "" rather than null, and AnthropicChatAutoConfiguration guards the key with a null
+    # check rather than a blank one — so "" is applied as a real key and SUPPRESSES
+    # AnthropicSetup.detectApiKey()'s own chain (ANTHROPIC_API_KEY, then ANTHROPIC_AUTH_TOKEN).
+    # Reading the token here keeps that second variable working. Collapsing this to
+    # ${ANTHROPIC_API_KEY:} would silently break anyone who authenticates with the token instead.
+    # When neither var is set, "" suppresses nothing, because there was nothing to fall back to.
+    #
+    # If a second starter is ever added, spring.ai.model.chat must name the winner or startup fails
+    # rather than guessing. Web slice tests pin it to `none` so they do not depend on which keys a
+    # developer has exported.
     openai:
       chat:
         model: ${OPENAI_MODEL:gpt-5-mini}
+        api-key: ${OPENAI_API_KEY:}
     anthropic:
+      api-key: ${ANTHROPIC_API_KEY:${ANTHROPIC_AUTH_TOKEN:}}
       chat:
         model: ${ANTHROPIC_MODEL:claude-sonnet-5}
     mcp:
@@ -33,13 +76,23 @@ spring:
       # dimension: an unsupported version is rejected with 400 naming the version, rather than
       # falling through to a 404 that looks like a wrong URL.
       #
-      # The version is required rather than defaulted. `spring.mvc.apiversion.default` would be
-      # dead config here: it fires only when the resolver returns null, and a path-segment resolver
-      # always returns whatever sits at the index. Spring also refuses to start with `required: true`
-      # and a default configured together.
+      # `v1` is the default version, so a request that resolves no version at all is served as v1
+      # rather than rejected. It matches SolrAssistantController.V1 — keep the two in step, since
+      # nothing checks that the default names a version any handler actually declares. `required`
+      # must be false for that: Spring refuses to start with `required: true` and a default
+      # configured together.
+      #
+      # Note what this does not do. The version segment is still part of the URL template
+      # (`/api/{version}` on the controller), so /api/chat is a 404 — no property relaxes a path
+      # pattern — and PathApiVersionResolver returns whatever segment sits at the index rather than
+      # null, so the default is not reached by dropping the segment either. Making unversioned URLs
+      # resolve to v1 would need the controller mapped at both /api and /api/{version} plus an
+      # ApiVersionResolver bean using PathApiVersionResolver's predicate constructor, which Spring
+      # Boot does not expose as a property.
       use:
         path-segment: 1
-      required: true
+      required: false
+      default: "v1"
       detect-supported: true
 
 management:
@@ -54,3 +107,5 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     operations-sorter: method
+server:
+  port: 9090

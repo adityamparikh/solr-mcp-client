@@ -1,21 +1,47 @@
+# Reaches a Solr MCP server over Streamable HTTP with a dedicated client-credentials service token.
+#
+# Defaults describe the local development stack — the Solr MCP server running under its own `http`
+# profile on :8080, fronted by Keycloak on :8180. Every value is overridable for a deployed server;
+# The client id and secret have no defaults: both identify an operator-managed confidential client
+# and must match the client registered with the identity provider.
+#
+# The server runs `validateAudienceClaim(true)`, so the token must carry an `aud` equal to that
+# server's canonical resource URI — confirm it with:
+#   curl -s http://localhost:8080/.well-known/oauth-protected-resource
+# Keycloak does not honour the RFC 8707 `resource=` parameter, so nothing puts that claim in the
+# token automatically: the client needs an `oidc-audience-mapper` whose Included Custom Audience is
+# that resource URI. Without it the token is issued happily and then rejected with 401.
 spring:
   ai:
     mcp:
       client:
+        # Dynamic client registration is off: this client is pre-registered with the IdP, and DCR
+        # would have it try to register itself on the first 401. It is stated rather than left to
+        # the default because mcp-client-security is a 0.1.x library whose README documents the
+        # opposite default from its code, so the default is not something to depend on.
+        authorization:
+          dynamic-client-registration:
+            enabled: false
+        # Streamable HTTP rather than SSE because the server sets
+        # `spring.ai.mcp.server.protocol=stateless`; `endpoint` is the path appended to `url`.
         streamable-http:
           connections:
             solr-mcp:
-              url: ${SOLR_MCP_HTTP_URL}
+              url: ${SOLR_MCP_HTTP_URL:http://localhost:8080}
               endpoint: ${SOLR_MCP_HTTP_ENDPOINT:/mcp}
   security:
     oauth2:
       client:
         registration:
+          # This key is the registration id, matched by McpHttpOAuth2Configuration.REGISTRATION_ID.
+          # It names the connection, not the IdP client — that is `client-id` below.
           solr-mcp:
             authorization-grant-type: client_credentials
             client-id: ${SOLR_MCP_OAUTH_CLIENT_ID}
             client-secret: ${SOLR_MCP_OAUTH_CLIENT_SECRET}
+            # Empty by default: the server authorizes on the audience claim, not on scopes, and
+            # Keycloak refuses a scope the client has not been assigned.
             scope: ${SOLR_MCP_OAUTH_SCOPES:}
         provider:
           solr-mcp:
-            token-uri: ${SOLR_MCP_OAUTH_TOKEN_URI}
+            token-uri: ${SOLR_MCP_OAUTH_TOKEN_URI:http://localhost:8180/realms/solr-mcp/protocol/openid-connect/token}

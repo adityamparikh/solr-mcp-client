@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.solr.mcp.client.web;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,16 +60,28 @@ import java.util.UUID;
 @Tag(name = "Solr assistant", description = "Natural-language access to Apache Solr through MCP tools")
 public class SolrAssistantController {
 
+    /**
+     * Public because {@link ApiCorsConfiguration} must name this header in
+     * {@code Access-Control-Expose-Headers} for cross-origin callers to read it back. Renaming it
+     * here without renaming it there breaks conversation continuity with no error to notice.
+     */
     public static final String CONVERSATION_ID_HEADER = "X-AI-Conversation-Id";
 
     /** Matched semantically, so {@code v1}, {@code 1}, {@code 1.0} and {@code 1.0.0} all reach it. */
-    static final String V1 = "1.0";
+    static final String V1 = "v1";
 
     static final int MAX_MESSAGE_LENGTH = 8_000;
     static final int MAX_CONVERSATION_ID_LENGTH = 128;
 
     private final SolrAssistant assistant;
 
+    /**
+     * Constructor injection keeps the single collaborator visible and the controller trivially
+     * instantiable in a slice test.
+     *
+     * @param assistant the only collaborator; this facade adds transport concerns and nothing else,
+     *                  so anything it would need beyond this belongs in the assistant instead
+     */
     public SolrAssistantController(SolrAssistant assistant) {
         this.assistant = assistant;
     }
@@ -101,12 +129,27 @@ public class SolrAssistantController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * The user's turn, and nothing else. The conversation it belongs to travels in
+     * {@code X-AI-Conversation-Id}, not in this body — see the class documentation for why.
+     *
+     * <p>The length ceiling is a guard on this facade, not a model limit: without inbound
+     * authentication, an unbounded message is an unbounded bill.
+     *
+     * @param message the user's turn
+     */
     public record ChatRequest(
             @NotBlank(message = "message must not be blank")
             @Size(max = MAX_MESSAGE_LENGTH, message = "message is too long")
             String message) {
     }
 
+    /**
+     * The assistant's answer, already resolved: any tool calls the model made against Solr MCP
+     * happened before this was built, so the content is final text and never a pending tool call.
+     *
+     * @param content the assistant's answer
+     */
     public record ChatReply(String content) {
     }
 }

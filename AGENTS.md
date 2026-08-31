@@ -29,15 +29,16 @@ grab-bag and no layer packages.
   CLI) injects `SolrAssistant` directly instead of calling the application's own HTTP endpoints.
 - `mcp`: everything about reaching the Solr MCP server — the outbound OAuth2 service token for the
   `mcp-http` profile and the startup check that a connection is configured at all.
-- `model`: which chat model provider is active, decided from the API keys in the environment before
-  Spring AI's provider auto-configurations are evaluated. Knows nothing of Solr, MCP or the web
-  layer.
 - `web`: the REST service this application *is* — controller, RFC 9457 error mapping, inbound
   security posture, OpenAPI. Transport only; no business logic.
 
-Both packages involve HTTP, in opposite directions. The test for placement: if replacing the REST
-facade with an in-process UI would leave a class still needed, it does not belong in `web`. Each
-package carries a `package-info.java` stating its role — keep it current.
+There is no `model` package. Which chat model provider is active is not decided in code at all: it
+follows from the single `spring-ai-starter-model-*` dependency on the classpath, which Spring AI
+auto-configures into the one `ChatModel` it finds.
+
+Both `mcp` and `web` involve HTTP, in opposite directions. The test for placement: if replacing the
+REST facade with an in-process UI would leave a class still needed, it does not belong in `web`.
+Each package carries a `package-info.java` stating its role — keep it current.
 
 When adding a capability, give it a package and put its `@Configuration` inside it. Do not create a
 shared `config` or `service` package.
@@ -49,8 +50,10 @@ shared `config` or `service` package.
   codebase came from exactly that; `McpHttpTransportWiringTest` guards against a regression.
 - **Keep application code model-agnostic.** Depend on `ChatClient` / `ChatClient.Builder`, never on
   a provider type such as `OpenAiChatModel` or `AnthropicChatModel`, and never inject a provider by
-  `@Qualifier`. Provider names belong only in `ChatModelProviderSelector`'s API-key map and in
-  per-provider model defaults in `application.yml`; adding a provider must not touch anything else.
+  `@Qualifier`. Provider names belong only in the `spring-ai-starter-model-*` dependency in
+  `build.gradle.kts` and in per-provider defaults in `application.yml`; switching providers must not
+  touch anything else. If more than one model starter is ever present, `spring.ai.model.chat` has to
+  name the winner or startup fails rather than guessing.
 - Never set `spring.ai.chat.client.enabled=false`. It removes the auto-configured builder along with
   Spring AI's `ChatClientBuilderConfigurer` — observation wiring and the tool-calling advisor.
 - Build the chat client from the auto-configured `ChatClient.Builder`; building from a `ChatModel`
@@ -66,10 +69,13 @@ shared `config` or `service` package.
 - Configuration classes that need `HttpSecurity` must be `@ConditionalOnWebApplication(SERVLET)`.
 - API versions are declared with `@RequestMapping(version = ...)` (Spring Framework 7 built-in
   versioning), never as a literal path prefix. Adding a version means adding handlers, not paths.
-- The version is required, never defaulted. `spring.mvc.apiversion.default` fires only when the
-  resolver returns null, which a path-segment resolver never does, so a default here is config that
-  cannot take effect — and Spring refuses to start with `required: true` alongside one. Serving an
-  unversioned URL would require a `WebMvcConfigurer` with
+- `spring.mvc.apiversion.default` is set to `v1`, matching `SolrAssistantController.V1`; keep the
+  two in step. Setting it forces `required: false`, since Spring refuses to start with
+  `required: true` alongside a default. Note it does not make unversioned URLs work:
+  `PathApiVersionResolver` returns whatever segment sits at the index rather than null, so the
+  default is never reached by dropping the segment, and `/api/chat` is a 404 regardless because the
+  segment is still part of the controller's path template. Serving an unversioned URL would require
+  a `WebMvcConfigurer` with
   `usePathSegment(int, Predicate<RequestPath>)`; do not add one without a reason to support
   unversioned callers.
 
@@ -79,10 +85,23 @@ shared `config` or `service` package.
   is a REST service in every profile. Hence the `mcp-` prefix. Do not add a profile that changes the
   web layer.
 - `mcp-stdio` is the default and launches the local Solr MCP process. `SOLR_MCP_JAR` must be an
-  absolute path. The child is a Spring Boot app: pass `SPRING_PROFILES_ACTIVE` (the *server's*
-  profile, unrelated to ours), not `PROFILES`.
-- `mcp-http` connects over Streamable HTTP with OAuth2 client credentials. It must use a dedicated
-  service token — never forward a REST caller's token.
+  absolute path. Pass the child only what it cannot default or inherit: `SOLR_URL`, which the SDK's
+  environment allowlist would otherwise drop. Do not name the server's profile — it defaults to
+  `stdio` — and note that `PROFILES` is the server's own placeholder, not something Spring reads.
+- `mcp-stdio-docker` is the same transport with a container as the child. It exists as its own
+  profile because `env:` cannot reach a container — the SDK applies that map to the `docker` CLI —
+  so container settings are `-e` flags in `args`, and because `SOLR_URL` must name
+  `host.docker.internal` rather than `localhost`. Keep the two profiles in step when either changes.
+- `mcp-http` connects over Streamable HTTP with OAuth2 client credentials, applied by
+  mcp-client-security. It must use a dedicated service token — never forward a REST caller's token,
+  which is also why the library's authorization-code default is replaced with its client-credentials
+  customizer rather than left in place.
+- Bind each provider's `api-key` at the level that provider's starter actually reads, and check the
+  starter's `spring-configuration-metadata.json` before moving one. The levels differ:
+  `spring.ai.openai.chat.api-key` is real (a per-chat override of `spring.ai.openai.api-key`), but
+  Anthropic binds only `spring.ai.anthropic.api-key` and has no `chat.api-key`. An api-key nested at
+  a level the starter does not bind is discarded in silence — no startup error, no warning.
+  `application.yml`'s Anthropic key had exactly that bug.
 - Exactly one model provider key may be set unless `spring.ai.model.chat` names the provider;
   otherwise startup fails rather than guessing. Web slice tests pin `spring.ai.model.chat` so they
   do not depend on which keys a developer exported.

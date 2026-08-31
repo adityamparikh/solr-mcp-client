@@ -1,3 +1,19 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.solr.mcp.client.mcp;
 
 import org.junit.jupiter.api.Test;
@@ -13,13 +29,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Verifies the default {@code mcp-stdio} wiring without launching the Solr MCP server: the client is
  * left uninitialized, so the transport binds but never spawns the child process.
  *
- * <p>The environment assertion is deliberate — the child is a Spring Boot application and reads
- * {@code SPRING_PROFILES_ACTIVE}; an earlier revision passed {@code PROFILES}, which that process
- * silently ignores.
+ * <p>The environment assertions are deliberate. {@code SOLR_URL} has to be declared because the SDK
+ * hands the child only an allowlisted environment, so a value exported in the operator's shell never
+ * reaches it. No profile is declared: the server already defaults to {@code stdio}, so naming it
+ * would add a second server-owned key for no behaviour. An earlier revision passed {@code PROFILES},
+ * which Spring itself ignores — the fix is to pass neither.
  */
 @SpringBootTest(properties = {
         "spring.ai.mcp.client.initialized=false",
-        "spring.ai.openai.api-key=test-key",
+        "spring.ai.anthropic.api-key=test-key",
         "SOLR_MCP_JAR=/opt/solr-mcp/solr-mcp.jar",
         "SOLR_URL=http://solr.example.com:8983/solr/"
 })
@@ -46,12 +64,19 @@ class McpStdioTransportWiringTest {
     }
 
     @Test
-    void passesSolrCoordinatesAndTheProfileTheChildProcessActuallyReads() {
+    void passesTheSolrCoordinatesTheChildCannotInherit() {
         var parameters = stdioProperties.toServerParameters().get("solr-mcp");
 
         assertThat(parameters.getEnv())
-                .containsEntry("SOLR_URL", "http://solr.example.com:8983/solr/")
-                .containsEntry("SPRING_PROFILES_ACTIVE", "stdio")
+                .containsEntry("SOLR_URL", "http://solr.example.com:8983/solr/");
+    }
+
+    @Test
+    void leavesTheServerProfileToTheServersOwnDefault() {
+        var parameters = stdioProperties.toServerParameters().get("solr-mcp");
+
+        assertThat(parameters.getEnv())
+                .doesNotContainKey("SPRING_PROFILES_ACTIVE")
                 .doesNotContainKey("PROFILES");
     }
 }
