@@ -86,8 +86,10 @@ shared `config` or `service` package.
   profile because `env:` cannot reach a container — the SDK applies that map to the `docker` CLI —
   so container settings are `-e` flags in `args`, and because `SOLR_URL` must name
   `host.docker.internal` rather than `localhost`. Keep the two profiles in step when either changes.
-- `mcp-http` connects over Streamable HTTP with OAuth2 client credentials. It must use a dedicated
-  service token — never forward a REST caller's token.
+- `mcp-http` connects over Streamable HTTP with OAuth2 client credentials, applied by
+  mcp-client-security. It must use a dedicated service token — never forward a REST caller's token,
+  which is also why the library's authorization-code default is replaced with its client-credentials
+  customizer rather than left in place.
 - Exactly one model provider key may be set unless `spring.ai.model.chat` names the provider;
   otherwise startup fails rather than guessing. Web slice tests pin `spring.ai.model.chat` so they
   do not depend on which keys a developer exported.

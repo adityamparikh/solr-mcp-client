@@ -1,9 +1,9 @@
 package org.apache.solr.mcp.client.mcp;
 
-import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.mcp.customizer.McpClientCustomizer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -50,10 +50,20 @@ class McpHttpTransportWiringTest {
         assertThat(context.getBean("solrMcpChatClient")).isInstanceOf(ChatClient.class);
     }
 
+    /**
+     * Exactly one, and ours: mcp-client-security auto-configures its own
+     * {@code McpClientCustomizer} for a pre-registered client, but that one resolves the token from
+     * an authenticated user. Ours suppresses it by occupying the type its
+     * {@code @ConditionalOnMissingBean} guards, so a second bean here means the user-token
+     * customizer is back and startup will have no token to send.
+     */
     @Test
-    void registersTheBearerTokenCustomizerWithTheMcpTransport() {
-        assertThat(context.getBeanNamesForType(McpSyncHttpClientRequestCustomizer.class))
-                .containsExactly("solrMcpBearerTokenCustomizer");
+    void registersOnlyTheClientCredentialsCustomizerWithTheMcpTransport() {
+        // Other McpClientCustomizer beans are Spring AI's own and unrelated to authorization;
+        // preRegisteredClientCustomizer is the one that must not be here.
+        assertThat(context.getBeanNamesForType(McpClientCustomizer.class))
+                .contains("solrMcpBearerTokenCustomizer")
+                .doesNotContain("preRegisteredClientCustomizer");
     }
 
     @Test

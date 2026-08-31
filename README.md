@@ -103,8 +103,18 @@ exported to run against it:
 ```bash
 export OPENAI_API_KEY=...          # or ANTHROPIC_API_KEY
 export SOLR_MCP_OAUTH_CLIENT_SECRET=...
-./gradlew bootRun --args='--spring.profiles.active=mcp-http'
+./gradlew bootRun --args='--spring.profiles.active=mcp-http --server.port=8090'
 ```
+
+`--server.port` matters locally: this application serves its own REST API on 8080 by default, which
+is also where the Solr MCP server listens, so the two clash on the same machine.
+
+The token is attached by [`mcp-client-security`](https://github.com/spring-ai-community/mcp-security),
+the client-side half of the library that secures the server. Its auto-configuration defaults a
+pre-registered client to the authorization-code customizer, which resolves a token from an
+authenticated user; this application has no user, so `McpHttpOAuth2Configuration` replaces that with
+the client-credentials customizer. Dynamic client registration stays off — the client is
+pre-registered with the IdP, and DCR would have it try to register itself on the first 401.
 
 Against a deployed server, override the rest:
 

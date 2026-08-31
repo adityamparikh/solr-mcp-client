@@ -6,6 +6,7 @@ sonarqube = "7.4.0.8496"
 jacoco = "0.8.15"
 spring-ai = "2.0.1"
 springdoc = "3.1.0"
+mcp-client-security = "0.1.14"
 
 [libraries]
 spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
@@ -15,6 +16,7 @@ spring-boot-validation = { module = "org.springframework.boot:spring-boot-starte
 spring-boot-oauth2-client = { module = "org.springframework.boot:spring-boot-starter-oauth2-client" }
 springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 spring-ai-mcp-client = { module = "org.springframework.ai:spring-ai-starter-mcp-client" }
+mcp-client-security = { module = "org.springaicommunity:mcp-client-security-spring-boot", version.ref = "mcp-client-security" }
 spring-ai-openai = { module = "org.springframework.ai:spring-ai-starter-model-openai" }
 spring-ai-anthropic = { module = "org.springframework.ai:spring-ai-starter-model-anthropic" }
 spring-boot-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }

@@ -14,6 +14,13 @@ spring:
   ai:
     mcp:
       client:
+        # Dynamic client registration is off: this client is pre-registered with the IdP, and DCR
+        # would have it try to register itself on the first 401. It is stated rather than left to
+        # the default because mcp-client-security is a 0.1.x library whose README documents the
+        # opposite default from its code, so the default is not something to depend on.
+        authorization:
+          dynamic-client-registration:
+            enabled: false
         # Streamable HTTP rather than SSE because the server sets
         # `spring.ai.mcp.server.protocol=stateless`; `endpoint` is the path appended to `url`.
         streamable-http:

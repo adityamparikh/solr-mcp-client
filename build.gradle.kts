@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.spring.boot.oauth2.client)
     implementation(libs.springdoc.openapi.webmvc.ui)
     implementation(libs.spring.ai.mcp.client)
+    implementation(libs.mcp.client.security)
     implementation(libs.spring.ai.openai)
     implementation(libs.spring.ai.anthropic)
 
