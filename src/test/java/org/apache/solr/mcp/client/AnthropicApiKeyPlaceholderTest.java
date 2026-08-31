@@ -16,6 +16,7 @@
  */
 package org.apache.solr.mcp.client;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.util.PropertyPlaceholderHelper;
@@ -61,7 +62,7 @@ class AnthropicApiKeyPlaceholderTest {
         return matcher.group(1).trim();
     }
 
-    private String resolve(String expression, String apiKey, String authToken) {
+    private String resolve(String expression, @Nullable String apiKey, @Nullable String authToken) {
         Properties properties = new Properties();
         if (apiKey != null) {
             properties.setProperty("ANTHROPIC_API_KEY", apiKey);

@@ -31,4 +31,7 @@
  * <p>This package is an adapter over {@link org.apache.solr.mcp.client.assistant.SolrAssistant} and
  * holds no business logic.
  */
+@NullMarked
 package org.apache.solr.mcp.client.web;
+
+import org.jspecify.annotations.NullMarked;

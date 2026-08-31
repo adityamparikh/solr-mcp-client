@@ -26,4 +26,7 @@
  * <p>Only {@code SolrAssistant} is public; the chat client and its configuration are package
  * private. New assistant behaviour belongs here, not in a controller.
  */
+@NullMarked
 package org.apache.solr.mcp.client.assistant;
+
+import org.jspecify.annotations.NullMarked;

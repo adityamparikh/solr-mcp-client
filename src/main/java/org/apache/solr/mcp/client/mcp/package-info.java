@@ -43,4 +43,7 @@
  * independent: swapping the transport changes nothing in {@code web}, and replacing the REST facade
  * with an in-process UI changes nothing here.
  */
+@NullMarked
 package org.apache.solr.mcp.client.mcp;
+
+import org.jspecify.annotations.NullMarked;

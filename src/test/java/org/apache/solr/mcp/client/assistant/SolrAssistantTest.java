@@ -23,6 +23,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -50,10 +51,31 @@ class SolrAssistantTest {
         when(requestSpec.call()).thenReturn(responseSpec);
         when(responseSpec.content()).thenReturn("I found 3 documents.");
 
-        String answer = assistant.ask("user-7:session-4", "Find documents about SolrCloud");
+        SolrAssistant.ChatReply reply = assistant.ask("user-7:session-4",
+                new SolrAssistant.ChatRequest("Find documents about SolrCloud"));
 
-        assertThat(answer).isEqualTo("I found 3 documents.");
+        assertThat(reply.content()).isEqualTo("I found 3 documents.");
         verify(advisorSpec).param(ChatMemory.CONVERSATION_ID, "user-7:session-4");
+    }
+
+    @Test
+    void rejectsAModelResponseThatCarriesNoContent() {
+        // ChatClient declares content() @Nullable and reports "completed without content" that way.
+        // Returning it would break this method's own non-null contract under @NullMarked and hand a
+        // caller a null answer in place of the upstream failure it actually is.
+        ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
+        ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
+
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.user(any(String.class))).thenReturn(requestSpec);
+        when(requestSpec.advisors(any(Consumer.class))).thenReturn(requestSpec);
+        when(requestSpec.call()).thenReturn(responseSpec);
+        when(responseSpec.content()).thenReturn(null);
+
+        assertThatExceptionOfType(SolrAssistant.EmptyAnswerException.class)
+                .isThrownBy(() -> assistant.ask("user-7:session-4",
+                        new SolrAssistant.ChatRequest("Find documents about SolrCloud")))
+                .withMessageContaining("user-7:session-4");
     }
 
     @Test

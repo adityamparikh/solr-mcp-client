@@ -14,8 +14,16 @@ springdoc = "3.1.0"
 # release as of 2026-08-31; check what changed before moving, and re-run
 # scripts/verify-service-token.sh against a real server afterwards.
 mcp-client-security = "0.1.14"
+error-prone = "2.50.0"
+nullaway = "0.14.1"
+errorprone-plugin = "5.1.1"
 
 [libraries]
+# Version managed by the Spring Boot BOM; spring-core already depends on it, but this project
+# imports the annotations directly, so the dependency is declared rather than inherited.
+jspecify = { module = "org.jspecify:jspecify" }
+error-prone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "error-prone" }
+nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-opentelemetry = { module = "org.springframework.boot:spring-boot-starter-opentelemetry" }
 spring-boot-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
@@ -37,3 +45,4 @@ spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
 cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }
 sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }
+errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }

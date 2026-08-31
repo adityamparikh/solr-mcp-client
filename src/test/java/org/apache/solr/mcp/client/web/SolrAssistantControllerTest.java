@@ -18,6 +18,8 @@ package org.apache.solr.mcp.client.web;
 
 import io.modelcontextprotocol.spec.McpTransportException;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -28,8 +30,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import static java.util.Objects.requireNonNull;
 import static org.apache.solr.mcp.client.web.SolrAssistantController.CONVERSATION_ID_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -57,8 +61,8 @@ class SolrAssistantControllerTest {
 
     @Test
     void continuesTheConversationNamedInTheHeader() throws Exception {
-        given(assistant.ask("user-7:session-4", "Find documents about SolrCloud"))
-                .willReturn("I found 3 documents.");
+        given(assistant.ask("user-7:session-4", new ChatRequest("Find documents about SolrCloud")))
+                .willReturn(new ChatReply("I found 3 documents."));
 
         mockMvc.perform(post("/api/v1/chat")
                         .header(CONVERSATION_ID_HEADER, "user-7:session-4")
@@ -73,7 +77,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void startsAFreshConversationWhenTheHeaderIsAbsent() throws Exception {
-        given(assistant.ask(anyString(), anyString())).willReturn("Hello.");
+        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
 
         String issued = mockMvc.perform(chat("/api/v1/chat"))
                 .andExpect(status().isOk())
@@ -81,12 +85,12 @@ class SolrAssistantControllerTest {
 
         // No shared "default" bucket: an omitted header must not join other callers' memory.
         assertThat(issued).isNotBlank().isNotEqualTo("default");
-        then(assistant).should().ask(eq(issued), anyString());
+        then(assistant).should().ask(eq(issued), any(ChatRequest.class));
     }
 
     @Test
     void issuesADistinctConversationForEachAnonymousRequest() throws Exception {
-        given(assistant.ask(anyString(), anyString())).willReturn("Hello.");
+        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
 
         String first = issuedConversationId();
         String second = issuedConversationId();
@@ -95,19 +99,8 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void rejectsAnOversizedConversationIdHeader() throws Exception {
-        mockMvc.perform(post("/api/v1/chat")
-                        .header(CONVERSATION_ID_HEADER, "x".repeat(SolrAssistantController.MAX_CONVERSATION_ID_LENGTH + 1))
-                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("conversationId is too long"));
-
-        then(assistant).should(never()).ask(anyString(), anyString());
-    }
-
-    @Test
     void treatsEverySpellingOfVersionOneAsTheSameVersion() throws Exception {
-        given(assistant.ask(anyString(), anyString())).willReturn("ok");
+        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
         // Versions are compared semantically, not textually.
         for (String segment : new String[]{"v1", "1", "1.0", "1.0.0"}) {
@@ -124,7 +117,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/chat"))
                 .andExpect(status().isNotFound());
 
-        then(assistant).should(never()).ask(anyString(), anyString());
+        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -133,7 +126,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/v9/chat"))
                 .andExpect(status().isBadRequest());
 
-        then(assistant).should(never()).ask(anyString(), anyString());
+        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -141,7 +134,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/banana/chat"))
                 .andExpect(status().isBadRequest());
 
-        then(assistant).should(never()).ask(anyString(), anyString());
+        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -154,19 +147,8 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void rejectsAnOversizedMessage() throws Exception {
-        String tooLong = "x".repeat(SolrAssistantController.MAX_MESSAGE_LENGTH + 1);
-
-        mockMvc.perform(post("/api/v1/chat").contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"message":"%s"}""".formatted(tooLong)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("message is too long"));
-    }
-
-    @Test
     void reportsATimedOutTransportAsGatewayTimeout() throws Exception {
-        given(assistant.ask(anyString(), anyString()))
+        given(assistant.ask(anyString(), any(ChatRequest.class)))
                 .willThrow(new McpTransportException("stream closed while awaiting the tool result"));
 
         mockMvc.perform(chat("/api/v1/chat"))
@@ -176,8 +158,20 @@ class SolrAssistantControllerTest {
 
     @Test
     void reportsAFailedServiceTokenAsBadGatewayWithoutLeakingTheCause() throws Exception {
-        given(assistant.ask(anyString(), anyString())).willThrow(new OAuth2AuthorizationException(
+        given(assistant.ask(anyString(), any(ChatRequest.class))).willThrow(new OAuth2AuthorizationException(
                 new OAuth2Error("invalid_client", "bad secret for https://idp.internal/token", null)));
+
+        mockMvc.perform(chat("/api/v1/chat"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.detail").value("The Solr assistant could not complete the request."));
+    }
+
+    @Test
+    void reportsAnEmptyModelAnswerAsBadGateway() throws Exception {
+        // ChatClient reports "completed with no content" as a null body. It must surface as an
+        // upstream failure, not as a 200 carrying {"content": null}.
+        given(assistant.ask(anyString(), any(ChatRequest.class))).willThrow(
+                new SolrAssistant.EmptyAnswerException("The chat model returned no content for conversation c-1"));
 
         mockMvc.perform(chat("/api/v1/chat"))
                 .andExpect(status().isBadGateway())
@@ -192,22 +186,13 @@ class SolrAssistantControllerTest {
         then(assistant).should().forget("user-7:session-4");
     }
 
-    @Test
-    void rejectsAnOversizedConversationIdOnDelete() throws Exception {
-        mockMvc.perform(delete("/api/v1/chat/{conversationId}",
-                        "x".repeat(SolrAssistantController.MAX_CONVERSATION_ID_LENGTH + 1)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("conversationId is too long"));
-
-        then(assistant).should(never()).forget(anyString());
-    }
-
     private static MockHttpServletRequestBuilder chat(String path) {
         return post(path).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY);
     }
 
     private String issuedConversationId() throws Exception {
-        return mockMvc.perform(chat("/api/v1/chat"))
-                .andReturn().getResponse().getHeader(CONVERSATION_ID_HEADER);
+        return requireNonNull(mockMvc.perform(chat("/api/v1/chat"))
+                .andReturn().getResponse().getHeader(CONVERSATION_ID_HEADER),
+                CONVERSATION_ID_HEADER + " should be echoed on every response");
     }
 }

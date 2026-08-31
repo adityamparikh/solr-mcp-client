@@ -43,4 +43,7 @@
  * {@code config} or {@code service} package, and each package keeps a {@code package-info.java}
  * stating its role.
  */
+@NullMarked
 package org.apache.solr.mcp.client;
+
+import org.jspecify.annotations.NullMarked;

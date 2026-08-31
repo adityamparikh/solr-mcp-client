@@ -17,6 +17,8 @@
 package org.apache.solr.mcp.client.web;
 
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatReply;
+import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.apache.solr.mcp.client.web.SolrAssistantController.CONVERSATION_ID_HEADER;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -51,7 +54,7 @@ class ApiCorsConfigurationTest {
 
         @Test
         void exposesTheConversationHeaderToTheBrowser() throws Exception {
-            given(assistant.ask(anyString(), anyString())).willReturn("ok");
+            given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
             // Without this the browser reads null for X-AI-Conversation-Id and every request looks
             // like a new conversation, with no error to notice.
@@ -82,7 +85,7 @@ class ApiCorsConfigurationTest {
 
         @Test
         void admitsEachOfThem() throws Exception {
-            given(assistant.ask(anyString(), anyString())).willReturn("ok");
+            given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
             // A comma-separated value must become several origins, not one nonsensical origin.
             for (String origin : new String[]{UI_ORIGIN, "https://admin.example.com"}) {
