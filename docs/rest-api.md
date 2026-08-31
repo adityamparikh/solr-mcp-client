@@ -18,7 +18,7 @@
 { "message": "How many documents are in the books collection?" }
 ```
 
-`message` must be non-blank and at most **8,000** characters.
+`message` must be non-blank.
 
 **Response** — `200 application/json`:
 
@@ -28,7 +28,7 @@
 
 The conversation id travels **only** in the `X-AI-Conversation-Id` header, in both directions —
 never in the body. Omit it on the request to start a new conversation; the id used is always echoed
-on the response. It is limited to 128 characters.
+on the response.
 
 ```bash
 curl -si localhost:9090/api/v1/chat \
