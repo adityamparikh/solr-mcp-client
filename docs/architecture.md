@@ -9,7 +9,7 @@ grab-bag, no layer packages.
 | --- | --- |
 | `assistant` | `SolrAssistant` (the transport-independent seam) and its `ChatClient` wiring |
 | `mcp` | Everything about *reaching* the Solr MCP server: the outbound OAuth2 service token and the startup tool check |
-| `observability` | The two OpenTelemetry gaps Spring Boot leaves open here: metrics over OTLP/gRPC, and trace propagation into MCP requests — see [Observability](observability.md) |
+| `observability` | Trace propagation into MCP requests, which Spring Boot's instrumentation cannot reach — see [Observability](observability.md) |
 | `web` | The REST service this application *is*: controller, RFC 9457 error mapping, inbound security posture, CORS, OpenAPI |
 
 `SolrAssistant` is public; the chat client bean and its configuration are package-private. The test

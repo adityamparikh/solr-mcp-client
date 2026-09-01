@@ -38,7 +38,7 @@ profile.
 | [REST API](docs/rest-api.md) | Endpoints, the conversation header, RFC 9457 errors, API versioning, CORS, OpenAPI/Swagger UI |
 | [Transports](docs/transports.md) | The three `mcp-*` profiles, Keycloak/OAuth2 service-token setup, the audience claim, startup verification |
 | [Model providers](docs/model-providers.md) | How the provider is chosen, OpenAI/Anthropic keys, OpenAI-compatible endpoints, local models, the tool-calling constraint |
-| [Observability](docs/observability.md) | Traces, logs and metrics over OTLP, the gRPC metrics path, trace propagation into MCP calls |
+| [Observability](docs/observability.md) | Traces, logs and metrics over OTLP, the gRPC-only-collector caveat, trace propagation into MCP calls |
 | [Logging the LLM exchange](docs/logging.md) | Seeing the full tool negotiation with `SimpleLoggerAdvisor` |
 | [Security posture](docs/security.md) | Why inbound is unauthenticated, what OAuth2 actually secures, secrets and error leakage |
 | [Architecture](docs/architecture.md) | Package layout and the seam a future UI binds to |

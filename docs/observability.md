@@ -8,7 +8,7 @@
 | --- | --- |
 | Traces | `spring-boot-starter-opentelemetry` exports over OTLP through the OpenTelemetry SDK, configured by the standard `OTEL_*` environment variables |
 | Logs | Same starter, same SDK, same variables |
-| Metrics | Micrometer meters, bridged into that same SDK and exported over **OTLP/gRPC** — but only when the environment announces a gRPC collector (see below) |
+| Metrics | Micrometer's OTLP registry, pushing over **OTLP/HTTP** to `http://localhost:4318/v1/metrics` unless `management.otlp.metrics.export.url` says otherwise |
 
 Sampling is set to `management.tracing.sampling.probability: 1.0` — **every** request is traced.
 That is the right setting for development and for the low-traffic deployments this application
@@ -18,36 +18,24 @@ Only `health` and `info` are exposed through the actuator
 (`management.endpoints.web.exposure.include`); there is no metrics scrape endpoint. Metrics leave
 by push, or not at all.
 
-## Metrics over OTLP/gRPC
+## The gRPC caveat for metrics
 
 Spring Boot's OpenTelemetry starter has an asymmetry: traces and logs go through the OpenTelemetry
 SDK, which speaks both OTLP transports, but metrics stay on Micrometer's own OTLP registry
-(`micrometer-registry-otlp`), which speaks **only OTLP over HTTP**. A collector that accepts only
-gRPC — IntelliJ IDEA's built-in OpenTelemetry receiver is one — would receive traces and logs but
-reject every metrics POST.
+(`micrometer-registry-otlp`), which speaks **only OTLP over HTTP** — gRPC support is a
+[still-open Micrometer feature request](https://github.com/micrometer-metrics/micrometer/issues/5040).
+This application accepts that asymmetry rather than working around it:
 
-The `observability` package closes that gap. `OtlpGrpcMetricsConfiguration` activates when the
-environment announces a gRPC collector and routes metrics through the SDK's gRPC exporter instead;
-`OpenTelemetryMeterRegistry` bridges every Micrometer meter — JVM, HTTP server, Spring AI — into
-it. Without the announcement the configuration is inert.
+- Against a full collector that opens both ports — the OpenTelemetry Collector, the Grafana LGTM
+  stack — everything works: point `management.otlp.metrics.export.url` at the collector's
+  `:4318/v1/metrics` and the `OTEL_*` variables at `:4317` or `:4318` as it prefers.
+- Against a **gRPC-only** collector — IntelliJ IDEA's built-in receiver is one — traces and logs
+  arrive but metrics do not, and the registry warns on each push interval that `localhost:4318`
+  is not answering. Silence it with `management.otlp.metrics.export.enabled: false` if the noise
+  bothers you.
 
-Everything flows from the standard OpenTelemetry variables — nothing names the collector in this
-repository's configuration:
-
-| Variable | Effect | Default |
-| --- | --- | --- |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` switches the gRPC metrics path on; anything else leaves it inert | — |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Where all signals go | `http://localhost:4317` |
-| `OTEL_METRIC_EXPORT_INTERVAL` | Metrics push interval, milliseconds | `60000` (the OTel specification's default) |
-
-IntelliJ injects all of these when a run configuration has monitoring enabled — including a fresh
-random port per IDE session — so running under the IDE needs no configuration at all, and the
-IDE's *Monitoring* tool window shows traces and metrics together.
-
-Micrometer's HTTP registry is **excluded from the classpath** in `build.gradle.kts` rather than
-disabled by property: left in place it pushes to its `localhost:4318` default and warns on every
-interval, and no environment this application runs in has an OTLP/HTTP collector. Re-add the
-dependency explicitly if one ever becomes a real target.
+Pointing `management.otlp.metrics.export.url` at a gRPC port does not help: it only moves the HTTP
+POST, and a gRPC listener rejects it.
 
 ## Trace propagation across MCP calls
 

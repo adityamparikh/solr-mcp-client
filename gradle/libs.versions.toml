@@ -32,16 +32,6 @@ spring-boot-oauth2-client = { module = "org.springframework.boot:spring-boot-sta
 springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 spring-ai-mcp-client = { module = "org.springframework.ai:spring-ai-starter-mcp-client" }
 mcp-client-security = { module = "org.springaicommunity:mcp-client-security-spring-boot", version.ref = "mcp-client-security" }
-# Bridges Micrometer meters into the OpenTelemetry SDK so metrics can leave over OTLP/gRPC —
-# Micrometer's own OTLP registry speaks only HTTP. The "-1.5" in the artifact name is the minimum
-# Micrometer API it instruments, not its own version; the "-alpha" suffix is how the OTel
-# instrumentation project labels every module outside its stability guarantees, so expect it to
-# stay even as versions advance. Its opentelemetry-* transitives are pinned by the Spring Boot BOM.
-opentelemetry-micrometer = { module = "io.opentelemetry.instrumentation:opentelemetry-micrometer-1.5", version = "2.16.0-alpha" }
-# Version managed by the Spring Boot BOM. Already on the runtime classpath through the starter, but
-# only runtime-scoped there; OtlpGrpcMetricsConfiguration constructs its exporter directly, so the
-# compile classpath needs the declaration too.
-opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp" }
 spring-ai-openai = { module = "org.springframework.ai:spring-ai-starter-model-openai" }
 spring-ai-anthropic = { module = "org.springframework.ai:spring-ai-starter-model-anthropic" }
 spring-boot-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }

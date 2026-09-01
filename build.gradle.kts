@@ -44,18 +44,7 @@ repositories {
 dependencies {
     implementation(libs.jspecify)
     implementation(libs.spring.boot.actuator)
-    // micrometer-registry-otlp is excluded because it can succeed nowhere this application runs:
-    // it speaks only OTLP over HTTP, the IDE's receiver accepts only gRPC, and no deployment has an
-    // OTLP/HTTP collector — left in place it pushes to its localhost:4318 default and warns on
-    // every interval. Metrics leave through the OpenTelemetry SDK instead (see the observability
-    // package). Excluding the jar, rather than setting management.otlp.metrics.export.enabled,
-    // makes the auto-configuration back off entirely with no property to keep in step. Re-add the
-    // dependency explicitly if an OTLP/HTTP collector ever becomes a real target.
-    implementation(libs.spring.boot.opentelemetry) {
-        exclude(group = "io.micrometer", module = "micrometer-registry-otlp")
-    }
-    implementation(libs.opentelemetry.micrometer)
-    implementation(libs.opentelemetry.exporter.otlp)
+    implementation(libs.spring.boot.opentelemetry)
     implementation(libs.spring.boot.webmvc)
     implementation(libs.spring.boot.validation)
     implementation(libs.spring.boot.oauth2.client)
