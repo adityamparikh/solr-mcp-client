@@ -125,6 +125,19 @@ tasks.bootJar {
 // sibling directory is honored the same): protobuf's
 // ExtensionRegistryFactory reflectively probes for the full (non-lite) runtime when Micrometer's
 // OtlpMeterRegistry builds its first OTLP message, which only surfaces when the image runs.
+// Which profiles the native image is baked for: `-PaotProfiles=cli,mcp-http` etc. Spring AOT's
+// closed-world assumption freezes bean-shaping conditions at build time, so this property decides
+// what the binary IS — web facade vs cli REPL, stdio vs http transport. Without it the image is
+// the default composition (web, mcp-stdio). mcp-stdio vs mcp-stdio-docker differ only in property
+// values and stay switchable at run time. Run `clean` when changing the value: the injected args
+// are not a tracked task input, and a stale AOT output baked for another composition fails only
+// at binary startup.
+tasks.withType<org.springframework.boot.gradle.tasks.aot.ProcessAot>().configureEach {
+    providers.gradleProperty("aotProfiles").orNull?.let {
+        args("--spring.profiles.active=$it")
+    }
+}
+
 graalvmNative {
     binaries {
         named("main") {
