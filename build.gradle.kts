@@ -135,8 +135,8 @@ tasks.check {
 
 sonar {
     properties {
-        property("sonar.organization", "adityaparikh91087")
-        property("sonar.projectKey", "adityaparikh91087_spring-ai-mcp-client")
+        property("sonar.organization", "adityamparikh")
+        property("sonar.projectKey", "adityamparikh_solr-mcp-client")
         property("sonar.host.url", "https://sonarcloud.io")
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
