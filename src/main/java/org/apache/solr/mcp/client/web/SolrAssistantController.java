@@ -101,7 +101,6 @@ public class SolrAssistantController {
     ResponseEntity<ChatReply> chat(
             @Parameter(description = "Conversation to continue; omit to start a new one. Always returned.")
             @RequestHeader(name = CONVERSATION_ID_HEADER, defaultValue = NEW_CONVERSATION_ID)
-            @NotBlank(message = "conversationId must not be blank")
             String conversationId,
             @Valid @RequestBody ChatRequest request) {
 

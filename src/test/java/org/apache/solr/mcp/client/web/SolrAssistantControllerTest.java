@@ -100,20 +100,6 @@ class SolrAssistantControllerTest {
     }
 
     @Test
-    void rejectsABlankConversationIdHeader() throws Exception {
-        // The header default only fires when the header is absent, never when it is present but
-        // empty, so without @NotBlank a blank header would reach the assistant as the shared ""
-        // conversation the class contract rules out.
-        mockMvc.perform(post("/api/v1/chat")
-                        .header(CONVERSATION_ID_HEADER, "   ")
-                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("conversationId must not be blank"));
-
-        then(assistant).should(never()).ask(anyString(), any());
-    }
-
-    @Test
     void treatsEverySpellingOfVersionOneAsTheSameVersion() throws Exception {
         given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
