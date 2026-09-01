@@ -26,6 +26,10 @@ plugins {
     alias(libs.plugins.cyclonedx)
     alias(libs.plugins.sonarqube)
     alias(libs.plugins.errorprone)
+    // Adds nativeCompile/nativeTest and makes the Spring Boot plugin contribute its AOT tasks.
+    // The reachability-metadata repository is on by default in 1.x; the regular jvm build and
+    // `check` are untouched (nothing depends on the native tasks).
+    alias(libs.plugins.graalvm.buildtools.native)
 }
 
 group = "org.apache.solr"
@@ -73,6 +77,13 @@ dependencies {
 // single source of truth for what is checked. A package list here would be a second place to keep
 // in step, and a new package would silently go unchecked until someone remembered to add it.
 tasks.withType<JavaCompile>().configureEach {
+    // Spring's AOT processor (compileAotJava/compileAotTestJava, from the GraalVM native plugin)
+    // generates bean-definition sources into Spring's own packages, which Framework 7 marks
+    // @NullMarked — NullAway would fail the build on generated code this project doesn't own.
+    if (name.startsWith("compileAot")) {
+        options.errorprone.enabled = false
+        return@configureEach
+    }
     options.errorprone {
         disableAllChecks = true
         check("NullAway", CheckSeverity.ERROR)
@@ -98,6 +109,34 @@ dependencyManagement {
 tasks.bootJar {
     manifest {
         attributes("Enable-Native-Access" to "ALL-UNNAMED")
+    }
+}
+
+// The native image counterpart of the manifest grant above: a native image never reads a jar
+// manifest, so JEP 472 native access (needed by JLine's FFM terminal provider) is granted at
+// image build time instead. GraalVM 25+ compiles FFM downcalls by default. The plugin finds
+// native-image via GRAALVM_HOME, then JAVA_HOME (toolchain detection is off by default).
+//
+// Reflection the reachability-metadata repository misses is registered in
+// src/main/resources/META-INF/native-image/org.apache.solr/solr-mcp-client-protobuf/
+// reachability-metadata.json (JSON allows no comment, hence this one; the directory is NOT the
+// project's own GAV because Spring AOT generates its metadata at that path, and bootJar rejects
+// the duplicate entry — native-image scans every namespace under META-INF/native-image/**, so a
+// sibling directory is honored the same): protobuf's
+// ExtensionRegistryFactory reflectively probes for the full (non-lite) runtime when Micrometer's
+// OtlpMeterRegistry builds its first OTLP message, which only surfaces when the image runs.
+graalvmNative {
+    binaries {
+        named("main") {
+            buildArgs.add("--enable-native-access=ALL-UNNAMED")
+            // Workaround for https://github.com/spring-projects/spring-ai/issues/4714: GraalVM 25
+            // bakes BaseAdvisor into the image with its DEFAULT_SCHEDULER static left null, and
+            // every advisor built without an explicit scheduler (ours, and the ToolCallingAdvisor
+            // Spring AI auto-registers per request) then fails "scheduler cannot be null" — at
+            // run time only, the build stays green. Deferring the interface's initialization to
+            // run time lets its initializer actually run. Drop when the upstream fix lands.
+            buildArgs.add("--initialize-at-run-time=org.springframework.ai.chat.client.advisor.api.BaseAdvisor")
+        }
     }
 }
 

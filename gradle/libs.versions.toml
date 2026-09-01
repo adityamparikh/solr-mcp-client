@@ -18,6 +18,9 @@ springdoc = "3.1.0"
 # release as of 2026-08-31; check what changed before moving, and re-run
 # scripts/verify-service-token.sh against a real server afterwards.
 mcp-client-security = "0.1.14"
+# Native Build Tools graduated to 1.x in 2025; the Spring Shell reference still shows 0.9.16, which
+# predates the metadata repository being enabled by default.
+graalvm-buildtools = "1.1.11"
 error-prone = "2.50.0"
 nullaway = "0.14.1"
 errorprone-plugin = "5.1.1"
@@ -54,4 +57,5 @@ spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
 cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }
 sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }
+graalvm-buildtools-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm-buildtools" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
