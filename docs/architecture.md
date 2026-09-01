@@ -10,16 +10,23 @@ grab-bag, no layer packages.
 | `assistant` | `SolrAssistant` (the transport-independent seam) and its `ChatClient` wiring |
 | `mcp` | Everything about *reaching* the Solr MCP server: the outbound OAuth2 service token and the startup tool check |
 | `observability` | Trace propagation into MCP requests, which Spring Boot's instrumentation cannot reach — see [Observability](observability.md) |
-| `web` | The REST service this application *is*: controller, RFC 9457 error mapping, inbound security posture, CORS, OpenAPI |
+| `web` | The REST service this application serves by default: controller, RFC 9457 error mapping, inbound security posture, CORS, OpenAPI |
+| `cli` | The interactive shell the `cli` profile serves instead: Spring Shell commands over `SolrAssistant`, plus the no-op runner that keeps every other profile REPL-free |
 
 `SolrAssistant` is public; the chat client bean and its configuration are package-private. The test
 for placement: if replacing the REST facade with an in-process UI would leave a class still needed,
 it does not belong in `web`.
 
-## Next step: a pluggable UI layer
+Profiles come in two composable axes: the `mcp-*` profiles select the *outbound* transport, and the
+single `cli` profile selects the *inbound* adapter (a REPL instead of the web server,
+`spring.main.web-application-type=none`). `cli` must always be composed with one `mcp-*` profile —
+activating it alone replaces the `mcp-stdio` default rather than merging with it.
+
+## A pluggable UI layer
 
 `SolrAssistant` is the seam a UI binds to. An in-process UI injects that bean directly rather than
-calling this application's own HTTP endpoints.
+calling this application's own HTTP endpoints — the `cli` package is exactly that, and a browser UI
+would bind to the same seam.
 [spring-ai-vaadin](https://springaicommunity.mintlify.app/projects/incubating/spring-ai-vaadin) is
 the intended reference — note it is currently an **example application** rather than a released
 library (`0.0.1-SNAPSHOT`, not on Maven Central, still on Spring Boot 3.4.5), so adopting it means

@@ -62,7 +62,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void continuesTheConversationNamedInTheHeader() throws Exception {
-        given(assistant.ask("user-7:session-4", new ChatRequest("Find documents about SolrCloud")))
+        given(assistant.send("user-7:session-4", new ChatRequest("Find documents about SolrCloud")))
                 .willReturn(new ChatReply("I found 3 documents."));
 
         mockMvc.perform(post("/api/v1/chat")
@@ -78,7 +78,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void startsAFreshConversationWhenTheHeaderIsAbsent() throws Exception {
-        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
+        given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
 
         String issued = mockMvc.perform(chat("/api/v1/chat"))
                 .andExpect(status().isOk())
@@ -86,12 +86,12 @@ class SolrAssistantControllerTest {
 
         // No shared "default" bucket: an omitted header must not join other callers' memory.
         assertThat(issued).isNotBlank().isNotEqualTo("default");
-        then(assistant).should().ask(eq(issued), any(ChatRequest.class));
+        then(assistant).should().send(eq(issued), any(ChatRequest.class));
     }
 
     @Test
     void issuesADistinctConversationForEachAnonymousRequest() throws Exception {
-        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
+        given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("Hello."));
 
         String first = issuedConversationId();
         String second = issuedConversationId();
@@ -101,7 +101,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void treatsEverySpellingOfVersionOneAsTheSameVersion() throws Exception {
-        given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
+        given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
         // Versions are compared semantically, not textually.
         for (String segment : new String[]{"v1", "1", "1.0", "1.0.0"}) {
@@ -118,7 +118,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/chat"))
                 .andExpect(status().isNotFound());
 
-        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
+        then(assistant).should(never()).send(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -127,7 +127,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/v9/chat"))
                 .andExpect(status().isBadRequest());
 
-        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
+        then(assistant).should(never()).send(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -135,7 +135,7 @@ class SolrAssistantControllerTest {
         mockMvc.perform(chat("/api/banana/chat"))
                 .andExpect(status().isBadRequest());
 
-        then(assistant).should(never()).ask(anyString(), any(ChatRequest.class));
+        then(assistant).should(never()).send(anyString(), any(ChatRequest.class));
     }
 
     @Test
@@ -152,7 +152,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void reportsATimedOutTransportAsGatewayTimeout() throws Exception {
-        given(assistant.ask(anyString(), any(ChatRequest.class)))
+        given(assistant.send(anyString(), any(ChatRequest.class)))
                 .willThrow(new McpTransportException("stream closed while awaiting the tool result"));
 
         mockMvc.perform(chat("/api/v1/chat"))
@@ -163,7 +163,7 @@ class SolrAssistantControllerTest {
 
     @Test
     void reportsAFailedServiceTokenAsBadGatewayWithoutLeakingTheCause() throws Exception {
-        given(assistant.ask(anyString(), any(ChatRequest.class))).willThrow(new OAuth2AuthorizationException(
+        given(assistant.send(anyString(), any(ChatRequest.class))).willThrow(new OAuth2AuthorizationException(
                 new OAuth2Error("invalid_client", "bad secret for https://idp.internal/token", null)));
 
         mockMvc.perform(chat("/api/v1/chat"))
@@ -175,7 +175,7 @@ class SolrAssistantControllerTest {
     void reportsAnEmptyModelAnswerAsBadGateway() throws Exception {
         // ChatClient reports "completed with no content" as a null body. It must surface as an
         // upstream failure, not as a 200 carrying {"content": null}.
-        given(assistant.ask(anyString(), any(ChatRequest.class))).willThrow(
+        given(assistant.send(anyString(), any(ChatRequest.class))).willThrow(
                 new SolrAssistant.EmptyAnswerException("The chat model returned no content for conversation c-1"));
 
         mockMvc.perform(chat("/api/v1/chat"))

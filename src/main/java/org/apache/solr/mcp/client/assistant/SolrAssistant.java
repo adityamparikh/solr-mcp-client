@@ -25,9 +25,10 @@ import org.springframework.stereotype.Service;
  * The Solr assistant, expressed independently of any transport.
  *
  * <p>This is the seam a user interface binds to. The REST facade in
- * {@code org.apache.solr.mcp.client.web} is one adapter over it; an in-process UI layer (Vaadin,
- * Hilla, a CLI runner) injects this bean directly rather than calling the application's own HTTP
- * endpoints. Keeping the chat client, memory scoping and MCP tools here means adding a UI
+ * {@code org.apache.solr.mcp.client.web} is one adapter over it, and the interactive shell in
+ * {@code org.apache.solr.mcp.client.cli} is a second; an in-process UI layer (that shell, or a
+ * future Vaadin/Hilla view) injects this bean directly rather than calling the application's own
+ * HTTP endpoints. Keeping the chat client, memory scoping and MCP tools here means adding a UI
  * duplicates none of that wiring.
  *
  * <p>{@link ChatRequest} and {@link ChatReply} are the assistant's own vocabulary rather than the
@@ -43,7 +44,7 @@ public class SolrAssistant {
 
     /**
      * Both collaborators are singletons shared by every conversation; the conversation id passed to
-     * {@link #ask} is what keeps their state separate.
+     * {@link #send} is what keeps their state separate.
      *
      * @param chatClient the assistant's own client, already carrying the system prompt, memory
      *                   advisor and Solr MCP tools
@@ -68,7 +69,7 @@ public class SolrAssistant {
      * @throws EmptyAnswerException if the model completed without producing any content, which
      *                              {@code ChatClient} reports as a null body
      */
-    public ChatReply ask(String conversationId, ChatRequest request) {
+    public ChatReply send(String conversationId, ChatRequest request) {
         String answer = chatClient.prompt()
                 .user(request.message())
                 .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))

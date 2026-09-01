@@ -106,7 +106,7 @@ public class SolrAssistantController {
 
         return ResponseEntity.ok()
                 .header(CONVERSATION_ID_HEADER, conversationId)
-                .body(assistant.ask(conversationId, request));
+                .body(assistant.send(conversationId, request));
     }
 
     /**

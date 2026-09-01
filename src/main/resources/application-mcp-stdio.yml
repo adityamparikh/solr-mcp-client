@@ -14,6 +14,11 @@
 # limitations under the License.
 
 spring:
+  # The canonical Spring AI stdio posture — "you must disable the banner and the console logging
+  # to allow the STDIO transport to work" — applied to every launch of this profile so that no
+  # console writer exists anywhere near a stdio transport, web mode and cli composition alike.
+  main:
+    banner-mode: off
   ai:
     mcp:
       client:
@@ -38,3 +43,17 @@ spring:
               # second server-owned key that breaks quietly if the server renames it.
               env:
                 SOLR_URL: ${SOLR_URL:http://localhost:8983/solr/}
+
+logging:
+  # All console logging is disabled for stdio MCP interactions. The threshold is Boot's supported
+  # form of "console appender off" — an empty logging.pattern.console is NOT equivalent: Logback
+  # rejects it and prints its own "Empty or null pattern" status error to the console. Quoted
+  # because a bare OFF could be read as YAML's boolean.
+  #
+  # The cost is accepted knowingly: a child that dies or diagnostics of a failed startup print
+  # nothing to the console — startup failures still abort via McpToolVerifier, per-request
+  # failures surface as request errors, and logs still ship over OTLP where a collector is
+  # configured (the threshold affects only the console appender). Keep this file in step with
+  # application-mcp-stdio-docker.yml.
+  threshold:
+    console: "OFF"

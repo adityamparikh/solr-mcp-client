@@ -17,10 +17,12 @@ spring:
   application:
     name: solr-mcp-client
   profiles:
-    # Profiles select how this client REACHES the Solr MCP server, not how it serves its own API:
-    # this application is a REST service in every profile. mcp-stdio is the default; activating any
-    # profile explicitly replaces it, so McpToolVerifier fails fast rather than starting with zero
-    # Solr MCP tools.
+    # mcp-* profiles select how this client REACHES the Solr MCP server; the single `cli` profile
+    # selects the inbound adapter (a Spring Shell REPL instead of the REST service — see
+    # application-cli.yml). The two axes compose: cli,mcp-http is one application reached two ways.
+    # mcp-stdio is the default; activating any profile explicitly replaces it (never merges), so
+    # `cli` alone would drop the transport too — McpToolVerifier then fails fast rather than
+    # starting with zero Solr MCP tools.
     default: mcp-stdio
   ai:
     # Which provider is active is not decided here, and not in code either: it is decided by which

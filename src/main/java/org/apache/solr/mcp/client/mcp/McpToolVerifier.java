@@ -54,9 +54,13 @@ import java.util.stream.Collectors;
  * necessarily undoes the deferral. A context that must not reach a server therefore has to replace
  * this bean rather than set that property; the transport wiring tests use {@code @MockitoBean} for
  * exactly that.
+ *
+ * <p>The class is public solely so that context tests in other packages (the {@code cli} wiring
+ * tests) can name it in a {@code @MockitoBean} field for that replacement; the constructor stays
+ * package private, so it is still not constructible from outside.
  */
 @Component
-class McpToolVerifier {
+public class McpToolVerifier {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolVerifier.class);
 

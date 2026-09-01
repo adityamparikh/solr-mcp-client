@@ -33,3 +33,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Spring Shell ###
+# JLine history file the cli profile writes, named after spring.application.name
+solr-mcp-client.log

@@ -24,11 +24,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * <p>Deliberately empty beyond the bootstrap call. Component scanning starts from this package, so
  * every capability is picked up from the subpackage that owns it — {@code assistant},
- * {@code mcp}, {@code web} — and nothing is registered centrally here. A new capability gets a
- * package with its own {@code @Configuration}, not a bean method on this class.
+ * {@code mcp}, {@code web}, {@code cli} — and nothing is registered centrally here. A new
+ * capability gets a package with its own {@code @Configuration}, not a bean method on this class.
+ * Spring Shell's commands are likewise found by scanning; no registration annotation belongs here.
  *
- * <p>The application is a REST service in every profile. Profiles choose how it reaches the Solr
- * MCP server, not what it serves; see {@link org.apache.solr.mcp.client.mcp}.
+ * <p>The application is a REST service in every profile except {@code cli}, which serves an
+ * interactive shell instead. The {@code mcp-*} profiles choose how it reaches the Solr MCP server;
+ * see {@link org.apache.solr.mcp.client.mcp} and {@link org.apache.solr.mcp.client.cli}.
  *
  * <p>Excluded from the JaCoCo coverage floor in {@code build.gradle.kts}: a bootstrap class with no
  * branches would only inflate the number without evidencing anything.

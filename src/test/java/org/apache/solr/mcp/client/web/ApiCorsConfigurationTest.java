@@ -54,7 +54,7 @@ class ApiCorsConfigurationTest {
 
         @Test
         void exposesTheConversationHeaderToTheBrowser() throws Exception {
-            given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
+            given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
             // Without this the browser reads null for X-AI-Conversation-Id and every request looks
             // like a new conversation, with no error to notice.
@@ -85,7 +85,7 @@ class ApiCorsConfigurationTest {
 
         @Test
         void admitsEachOfThem() throws Exception {
-            given(assistant.ask(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
+            given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
 
             // A comma-separated value must become several origins, not one nonsensical origin.
             for (String origin : new String[]{UI_ORIGIN, "https://admin.example.com"}) {
