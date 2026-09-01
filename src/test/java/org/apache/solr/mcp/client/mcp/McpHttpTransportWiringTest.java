@@ -86,7 +86,7 @@ class McpHttpTransportWiringTest {
         // Other McpClientCustomizer beans are Spring AI's own and unrelated to authorization;
         // preRegisteredClientCustomizer is the one that must not be here.
         assertThat(context.getBeanNamesForType(McpClientCustomizer.class))
-                .contains("solrMcpBearerTokenCustomizer")
+                .contains("solrMcpRequestCustomizer")
                 .doesNotContain("preRegisteredClientCustomizer");
     }
 

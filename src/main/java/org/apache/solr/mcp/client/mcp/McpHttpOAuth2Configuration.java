@@ -16,7 +16,16 @@
  */
 package org.apache.solr.mcp.client.mcp;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
+import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import io.modelcontextprotocol.common.McpTransportContext;
+import java.util.function.Supplier;
+import org.apache.solr.mcp.client.observability.TracePropagatingHttpRequestCustomizer;
+import org.springaicommunity.mcp.security.client.sync.AuthenticationMcpTransportContextProvider;
 import org.springaicommunity.mcp.security.client.sync.oauth2.http.client.OAuth2ClientCredentialsSyncHttpRequestCustomizer;
 import org.springframework.ai.mcp.customizer.McpClientCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +37,10 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 
 /**
- * Attaches a dedicated service token to every outbound Solr MCP request in the {@code mcp-http} profile.
+ * Attaches a dedicated service token to every outbound Solr MCP request in the {@code mcp-http}
+ * profile, and propagates the current trace context alongside it — see
+ * {@link org.apache.solr.mcp.client.observability.TracePropagatingHttpRequestCustomizer} for why
+ * the MCP transport needs that help.
  *
  * <p>The token itself is applied by {@code mcp-client-security}, the client-side half of the library
  * whose server half secures the Solr MCP server. Its Boot auto-configuration does not fit as it
@@ -75,15 +87,63 @@ class McpHttpOAuth2Configuration {
     }
 
     /**
-     * Attaches the service token to every outbound Solr MCP request. Declared as a
-     * {@link McpClientCustomizer} deliberately: that is the type the library's auto-configuration
-     * guards with {@code @ConditionalOnMissingBean}, so this bean is also what suppresses the
-     * user-bound authorization-code default described in the class Javadoc.
+     * Attaches the service token and the current trace context to every outbound Solr MCP request.
+     * Declared as a {@link McpClientCustomizer} deliberately: that is the type the library's
+     * auto-configuration guards with {@code @ConditionalOnMissingBean}, so this bean is also what
+     * suppresses the user-bound authorization-code default described in the class Javadoc.
+     *
+     * <p>The two concerns are composed into one lambda because the transport builder holds a
+     * single request customizer — a second {@code httpRequestCustomizer(...)} call replaces the
+     * first rather than adding to it, so registering trace propagation separately would silently
+     * drop the bearer token (or the reverse, depending on order).
+     */
+    // NullAway is suppressed for one annotation conflict: the MCP SDK declares the request body
+    // @Nullable (GET and DELETE requests carry none) while mcp-client-security 0.1.x declares it
+    // non-null. The library never dereferences the body — it only attaches the Authorization
+    // header — so passing the SDK's nullable value through is safe; the 0.x annotation is the
+    // defect, in keeping with this library's documented looseness (see libs.versions.toml).
+    @SuppressWarnings("NullAway")
+    @Bean
+    McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> solrMcpRequestCustomizer(
+            AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager,
+            Tracer tracer,
+            Propagator propagator) {
+        var bearerToken = new OAuth2ClientCredentialsSyncHttpRequestCustomizer(authorizedClientManager, REGISTRATION_ID);
+        var tracePropagation = new TracePropagatingHttpRequestCustomizer(tracer, propagator);
+        return (name, transport) -> transport.httpRequestCustomizer((builder, method, endpoint, body, context) -> {
+            bearerToken.customize(builder, method, endpoint, body, context);
+            tracePropagation.customize(builder, method, endpoint, body, context);
+        });
+    }
+
+    /**
+     * Captures the caller's trace context into the transport context at call time. The SDK
+     * evaluates this provider on the calling thread when the sync client subscribes, then carries
+     * the result through its Reactor pipeline to the request customizer above — which runs on a
+     * transport worker thread where the span thread-local is empty, so reading it there directly
+     * finds nothing. This capture-and-carry is the SDK's designed route for request-scoped data.
+     *
+     * <p>Typed {@code McpClientCustomizer<McpClient.SyncSpec>} deliberately, the same
+     * occupy-the-guarded-type move as the bean above: mcp-client-security auto-configures a
+     * customizer of this exact type to install its {@link AuthenticationMcpTransportContextProvider},
+     * guarded with {@code @ConditionalOnMissingBean} — so declaring a second provider-setting
+     * customizer would race it for the spec's single provider slot. This bean replaces it and
+     * delegates to that same provider, layering the trace context on top, so nothing the library
+     * captures is lost.
      */
     @Bean
-    McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> solrMcpBearerTokenCustomizer(
-            AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager) {
-        return (name, transport) -> transport.httpRequestCustomizer(
-                new OAuth2ClientCredentialsSyncHttpRequestCustomizer(authorizedClientManager, REGISTRATION_ID));
+    McpClientCustomizer<McpClient.SyncSpec> solrMcpTransportContextCustomizer(Tracer tracer) {
+        Supplier<McpTransportContext> authentication = new AuthenticationMcpTransportContextProvider();
+        return (name, spec) -> spec.transportContextProvider(() -> {
+            McpTransportContext base = authentication.get();
+            Span span = tracer.currentSpan();
+            if (span == null) {
+                return base;
+            }
+            TraceContext traceContext = span.context();
+            return key -> TracePropagatingHttpRequestCustomizer.TRACE_CONTEXT_KEY.equals(key)
+                    ? traceContext
+                    : base.get(key);
+        });
     }
 }
