@@ -42,7 +42,6 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import java.net.URI;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -64,11 +63,6 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     private static final String FAILED_DETAIL =
             "The Solr assistant could not complete the request.";
     private static final String VALIDATION_FALLBACK = "Request validation failed";
-
-    private static final String ERROR_TYPE_BASE = "https://solr.apache.org/mcp-client/errors/";
-    private static final URI VALIDATION_TYPE = URI.create(ERROR_TYPE_BASE + "validation-failed");
-    private static final URI UPSTREAM_UNAVAILABLE_TYPE = URI.create(ERROR_TYPE_BASE + "upstream-unavailable");
-    private static final URI UPSTREAM_FAILED_TYPE = URI.create(ERROR_TYPE_BASE + "upstream-failed");
 
     /**
      * Constraint violations on the request body. Overridden rather than added as a second
@@ -128,8 +122,7 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     @ResponseStatus(HttpStatus.GATEWAY_TIMEOUT)
     ProblemDetail handleUpstreamUnavailable(RuntimeException exception) {
         log.warn("Transient upstream failure serving a chat request", exception);
-        return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL,
-                "Upstream Unavailable", UPSTREAM_UNAVAILABLE_TYPE);
+        return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL, "Upstream Unavailable");
     }
 
     /**
@@ -148,8 +141,7 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
     ProblemDetail handleUpstreamFailure(RuntimeException exception) {
         log.error("Upstream failure serving a chat request", exception);
-        return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL,
-                "Upstream Request Failed", UPSTREAM_FAILED_TYPE);
+        return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL, "Upstream Request Failed");
     }
 
     /**
@@ -158,21 +150,19 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
      */
     private static ProblemDetail badRequest(String detail) {
         return problem(HttpStatus.BAD_REQUEST, detail.isEmpty() ? VALIDATION_FALLBACK : detail,
-                "Request Validation Failed", VALIDATION_TYPE);
+                "Request Validation Failed");
     }
 
     /**
-     * Every problem carries a {@code type}, a {@code title} and a {@code timestamp} beyond the
-     * status and detail RFC 9457 requires. The type is the stable, machine-readable name of the
-     * failure — a client should branch on it rather than on the prose in {@code detail}, which is
-     * free to be reworded. It identifies the failure; it is not a promise of a live page. The
-     * timestamp is what correlates a caller's response with the server-side log line, which is the
-     * only place the real upstream message is written.
+     * Every problem carries a {@code title} and a {@code timestamp} beyond the status and detail
+     * RFC 9457 requires; {@code type} stays at the RFC's {@code about:blank} default, uncommitted
+     * until a client actually needs to branch on it. The timestamp is what correlates a caller's
+     * response with the server-side log line, which is the only place the real upstream message
+     * is written.
      */
-    private static ProblemDetail problem(HttpStatus status, String detail, String title, URI type) {
+    private static ProblemDetail problem(HttpStatus status, String detail, String title) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setTitle(title);
-        problem.setType(type);
         problem.setProperty("timestamp", Instant.now());
         return problem;
     }

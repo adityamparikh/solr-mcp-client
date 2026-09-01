@@ -56,15 +56,6 @@ spring:
     # unresolvable placeholder breaks every test that starts a context whenever the var is absent,
     # including contexts that never build a ChatModel at all.
     #
-    # The Anthropic placeholder falls back through ANTHROPIC_AUTH_TOKEN before defaulting to empty,
-    # and that nesting is load-bearing rather than decorative. With the var absent the placeholder
-    # binds "" rather than null, and AnthropicChatAutoConfiguration guards the key with a null
-    # check rather than a blank one — so "" is applied as a real key and SUPPRESSES
-    # AnthropicSetup.detectApiKey()'s own chain (ANTHROPIC_API_KEY, then ANTHROPIC_AUTH_TOKEN).
-    # Reading the token here keeps that second variable working. Collapsing this to
-    # ${ANTHROPIC_API_KEY:} would silently break anyone who authenticates with the token instead.
-    # When neither var is set, "" suppresses nothing, because there was nothing to fall back to.
-    #
     # If a second starter is ever added, spring.ai.model.chat must name the winner or startup fails
     # rather than guessing. Web slice tests pin it to `none` so they do not depend on which keys a
     # developer has exported.
@@ -73,7 +64,7 @@ spring:
         model: ${OPENAI_MODEL:gpt-5-mini}
         api-key: ${OPENAI_API_KEY:}
     anthropic:
-      api-key: ${ANTHROPIC_API_KEY:${ANTHROPIC_AUTH_TOKEN:}}
+      api-key: ${ANTHROPIC_API_KEY:}
       chat:
         model: ${ANTHROPIC_MODEL:claude-sonnet-5}
     mcp:
@@ -109,30 +100,23 @@ spring:
       required: false
       default: "v1"
       detect-supported: true
+  threads:
+    virtual:
+      enabled: true
 
 logging:
   level:
     root: info
-  # Uncomment to log the full LLM exchange. SimpleLoggerAdvisor is always in the advisor chain
-    # (see ChatClientConfiguration) but self-guards on isDebugEnabled(), so this line is the only
-    # switch. Because the advisor sits inside ToolCallingAdvisor's recursion, an exchange that calls
-    # a Solr tool logs four entries rather than two: the initial request, the model's tool-call
-    # request, the follow-up carrying the tool results, and the final answer.
-    #
-    # DEBUG, not TRACE — the level changed in Spring AI 2.0 GA, and recipes written against the
-    # 2.0.0-M milestones still say TRACE, which now produces no output at all.
-    #
-    # Debugging only. The output is whole prompts and whole tool results: user queries and indexed
-    # Solr document contents land in the log, so do not leave this on in a deployed environment.
-    # Prefer this specific logger over a broad org.springframework.ai=DEBUG, which enables the same
-    # payload logging as a side effect.
-    # org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: DEBUG
+    org.springframework.ai: debug
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  tracing:
+    sampling:
+      probability: 1.0
 
 springdoc:
   api-docs:

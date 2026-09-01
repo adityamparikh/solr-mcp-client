@@ -16,13 +16,13 @@ so a starter that is present auto-configures itself unless told otherwise. **Kee
 beans and make `ChatClient.Builder` ambiguous. (`spring.ai.model.chat` can pin one explicitly, or
 `none` can disable chat entirely, as the web slice tests do.)
 
-`build.gradle.kts` currently has Anthropic active and OpenAI commented out:
+`build.gradle.kts` currently has OpenAI active and Anthropic commented out:
 
 ```kotlin
 dependencies {
     // ...
-    //  implementation(libs.spring.ai.openai)
-    implementation(libs.spring.ai.anthropic)
+    implementation(libs.spring.ai.openai)
+    //  implementation(libs.spring.ai.anthropic)
 }
 ```
 
@@ -32,14 +32,15 @@ dependencies {
 
 ## A missing API key fails on the first request, not at startup
 
-Nothing checks that you supplied one. `AnthropicChatAutoConfiguration` guards the key with a **null
-check, not a blank check** — `if (connectionProperties.getApiKey() != null) builder.apiKey(...)` —
-so any value, empty included, is applied as-is and the context starts. A missing or wrong key
-therefore surfaces as a provider authentication failure on the **first chat request**: a `502` with
-the generic `"The Solr assistant could not complete the request."` detail and the real cause in the
-server log. If chat fails immediately on an otherwise healthy deployment, check the key first.
+Nothing checks that you supplied one. The starters apply whatever the placeholder binds — the
+empty default included — and the context starts. A missing or wrong key therefore surfaces as a
+provider authentication failure on the **first chat request**: a `502` with the generic
+`"The Solr assistant could not complete the request."` detail and the real cause in the server
+log. If chat fails immediately on an otherwise healthy deployment, check the key first.
 
-That null guard has a second consequence worth knowing. The Anthropic client falls back to reading
+For Anthropic specifically, `AnthropicChatAutoConfiguration` guards the key with a **null check,
+not a blank check** — `if (connectionProperties.getApiKey() != null) builder.apiKey(...)`. That
+null guard has a consequence worth knowing. The Anthropic client falls back to reading
 `ANTHROPIC_API_KEY`, then `ANTHROPIC_AUTH_TOKEN`, from the environment itself — but **only when no
 key was configured at all**. Since `api-key: ${ANTHROPIC_API_KEY:}` binds an empty string when the
 variable is unset, that empty string counts as "configured" and suppresses the fallback. In
@@ -62,7 +63,36 @@ is *not* on the classpath inert, so a missing key for the inactive provider cann
 All of this is the opposite of how the MCP side behaves: `McpToolVerifier` refuses to start without
 a working connection, and `SOLR_MCP_OAUTH_CLIENT_ID`/`_SECRET` have no defaults at all.
 
-## Anthropic (the current default)
+## OpenAI (the current default)
+
+```bash
+export OPENAI_API_KEY=sk-...
+export OPENAI_MODEL=gpt-5-mini             # optional; this is the default in application.yml
+```
+
+| | Property | Env var used here | Default |
+| --- | --- | --- | --- |
+| API key | `spring.ai.openai.api-key` *(or `spring.ai.openai.chat.api-key`)* | `OPENAI_API_KEY` | — |
+| Model | `spring.ai.openai.chat.model` | `OPENAI_MODEL` | `gpt-5-mini` |
+| Base URL | `spring.ai.openai.base-url` *(or `spring.ai.openai.chat.base-url`)* | — | `https://api.openai.com` |
+
+Unlike Anthropic, the OpenAI starter accepts the key and base URL at *either* level:
+`OpenAiCommonProperties` owns the connection-level pair and `OpenAiChatProperties` offers a
+per-chat override, with the chat-level value winning when set. Prefer the connection-level form.
+
+## Switching to Anthropic
+
+Flip the two lines in `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    // ...
+    //  implementation(libs.spring.ai.openai)
+    implementation(libs.spring.ai.anthropic)
+}
+```
+
+Then:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -85,35 +115,6 @@ Other chat options follow the same flat shape: `spring.ai.anthropic.chat.tempera
 > `spring.ai.anthropic.chat.api-key` binds nothing — if you find it in older configuration, or nest
 > the key under `chat:` by symmetry with the OpenAI block, the key is silently discarded. OpenAI is
 > the exception, not the rule: it accepts a key at both levels.
-
-## Switching to OpenAI
-
-Flip the two lines in `build.gradle.kts`:
-
-```kotlin
-dependencies {
-    // ...
-    implementation(libs.spring.ai.openai)
-    //  implementation(libs.spring.ai.anthropic)
-}
-```
-
-Then:
-
-```bash
-export OPENAI_API_KEY=sk-...
-export OPENAI_MODEL=gpt-5-mini             # optional; this is the default in application.yml
-```
-
-| | Property | Env var used here | Default |
-| --- | --- | --- | --- |
-| API key | `spring.ai.openai.api-key` *(or `spring.ai.openai.chat.api-key`)* | `OPENAI_API_KEY` | — |
-| Model | `spring.ai.openai.chat.model` | `OPENAI_MODEL` | `gpt-5-mini` |
-| Base URL | `spring.ai.openai.base-url` *(or `spring.ai.openai.chat.base-url`)* | — | `https://api.openai.com` |
-
-Unlike Anthropic, the OpenAI starter accepts the key and base URL at *either* level:
-`OpenAiCommonProperties` owns the connection-level pair and `OpenAiChatProperties` offers a
-per-chat override, with the chat-level value winning when set. Prefer the connection-level form.
 
 ## Any other provider
 

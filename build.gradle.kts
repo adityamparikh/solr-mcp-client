@@ -51,8 +51,8 @@ dependencies {
     implementation(libs.springdoc.openapi.webmvc.ui)
     implementation(libs.spring.ai.mcp.client)
     implementation(libs.mcp.client.security)
-  //  implementation(libs.spring.ai.openai)
-    implementation(libs.spring.ai.anthropic)
+    implementation(libs.spring.ai.openai)
+  //  implementation(libs.spring.ai.anthropic)
 
     testImplementation(libs.spring.boot.actuator.test)
     testImplementation(libs.spring.boot.opentelemetry.test)

@@ -37,7 +37,8 @@ profile.
 | --- | --- |
 | [REST API](docs/rest-api.md) | Endpoints, the conversation header, RFC 9457 errors, API versioning, CORS, OpenAPI/Swagger UI |
 | [Transports](docs/transports.md) | The three `mcp-*` profiles, Keycloak/OAuth2 service-token setup, the audience claim, startup verification |
-| [Model providers](docs/model-providers.md) | How the provider is chosen, Anthropic/OpenAI keys, OpenAI-compatible endpoints, local models, the tool-calling constraint |
+| [Model providers](docs/model-providers.md) | How the provider is chosen, OpenAI/Anthropic keys, OpenAI-compatible endpoints, local models, the tool-calling constraint |
+| [Observability](docs/observability.md) | Traces, logs and metrics over OTLP, the gRPC-only-collector caveat, trace propagation into MCP calls |
 | [Logging the LLM exchange](docs/logging.md) | Seeing the full tool negotiation with `SimpleLoggerAdvisor` |
 | [Security posture](docs/security.md) | Why inbound is unauthenticated, what OAuth2 actually secures, secrets and error leakage |
 | [Architecture](docs/architecture.md) | Package layout and the seam a future UI binds to |
@@ -49,8 +50,8 @@ profile.
 ## Requirements
 
 - **JDK 25** (the Gradle toolchain will resolve one if it is not the default JDK).
-- **An API key for the chat model provider on the classpath.** Out of the box that is Anthropic, so
-  `ANTHROPIC_API_KEY`. See [Model providers](docs/model-providers.md) to change it.
+- **An API key for the chat model provider on the classpath.** Out of the box that is OpenAI, so
+  `OPENAI_API_KEY`. See [Model providers](docs/model-providers.md) to change it.
   Note the application starts *without* a key and fails on the first chat request instead.
 - **A reachable Solr MCP server**, in one of the three shapes described in
   [Transports](docs/transports.md). The application refuses to start if it cannot list any tools
@@ -65,7 +66,7 @@ The default profile is `mcp-stdio` (`spring.profiles.default`), which launches a
 server jar as a child process:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
 export SOLR_MCP_JAR=/absolute/path/to/solr-mcp.jar   # must be absolute
 export SOLR_URL=http://localhost:8983/solr/
 
