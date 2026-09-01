@@ -6,13 +6,23 @@ separate Solr MCP server, attaches that server's tools to a Spring AI `ChatClien
 resulting assistant over a small JSON API — so a user interface does not have to embed Spring AI, an
 MCP SDK, or a model provider's credentials.
 
-```
-   HTTP client                this application                    Solr MCP server            Solr
-  ─────────────  ──▶  ┌──────────────────────────────┐  ──▶  ┌──────────────────┐  ──▶  ┌─────────┐
-  POST /api/v1/chat   │ SolrAssistantController      │ stdio │ solr_search      │       │ /select │
-                      │   └▶ SolrAssistant           │  or   │ solr_index_...   │       │ /update │
-                      │        └▶ ChatClient ──▶ LLM │  HTTP │ ...              │       │ ...     │
-                      └──────────────────────────────┘       └──────────────────┘       └─────────┘
+```mermaid
+flowchart LR
+    client["HTTP client"] -- "POST /api/v1/chat" --> app
+
+    subgraph app["this application"]
+        direction LR
+        controller["SolrAssistantController"] --> assistant["SolrAssistant"]
+        assistant --> chatclient["ChatClient"] --> llm["LLM"]
+    end
+
+    app -- "stdio or HTTP" --> mcp
+
+    subgraph mcp["Solr MCP server"]
+        tools["solr_search<br/>solr_index_...<br/>..."]
+    end
+
+    mcp --> solr["Solr<br/>/select · /update · ..."]
 ```
 
 **Profiles select how this client *reaches* the Solr MCP server, never how it serves its own API** —
@@ -42,6 +52,7 @@ profile.
 | [Logging the LLM exchange](docs/logging.md) | Seeing the full tool negotiation with `SimpleLoggerAdvisor` |
 | [Security posture](docs/security.md) | Why inbound is unauthenticated, what OAuth2 actually secures, secrets and error leakage |
 | [Architecture](docs/architecture.md) | Package layout and the seam a future UI binds to |
+| [Framework comparison](docs/framework-comparison.md) | MCP feature parity vs JVM (LangChain4j, Koog, Embabel) and Python (LangGraph, OpenAI Agents SDK, PydanticAI, Google ADK, CrewAI) frameworks |
 
 [AGENTS.md](AGENTS.md) holds the wiring rules and conventions this codebase holds itself to.
 
