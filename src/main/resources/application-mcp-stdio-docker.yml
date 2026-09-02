@@ -30,6 +30,10 @@
 # official release, at which point SOLR_MCP_IMAGE can name that instead of a local build):
 #   cd <solr-mcp checkout> && ./gradlew jibDockerBuild
 spring:
+  # The canonical Spring AI stdio posture — banner and console logging disabled for every launch
+  # of this profile. Same setting and rationale as application-mcp-stdio.yml; keep them in step.
+  main:
+    banner-mode: off
   ai:
     mcp:
       client:
@@ -57,3 +61,11 @@ spring:
                 # The JVM image built by `jibDockerBuild`. The AOT-pinned native build is tagged
                 # solr-mcp:latest-native-stdio and works here too.
                 - "${SOLR_MCP_IMAGE:solr-mcp:latest}"
+
+logging:
+  # All console logging is disabled for stdio MCP interactions — same setting and rationale as
+  # application-mcp-stdio.yml: the threshold, not an empty pattern, is what turns the console
+  # appender off without Logback's "Empty or null pattern" status error. Keep the two files in
+  # step.
+  threshold:
+    console: "OFF"

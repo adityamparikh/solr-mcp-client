@@ -11,6 +11,10 @@
 MCP client settings common to all three (`application.yml`): client name `solr-mcp-client`,
 `type: SYNC`, `request-timeout: 60s`, `initialized: true`.
 
+All three transports also serve the interactive shell: compose any of them with the `cli` profile
+(`cli,mcp-stdio`, `cli,mcp-stdio-docker`, `cli,mcp-http`) — see the README's *Interactive shell*
+section. Nothing on this page changes under `cli`.
+
 ## `mcp-stdio` (default)
 
 The client is also the server's **launcher**, so it owns the child process spec.
@@ -31,6 +35,34 @@ export SOLR_URL=http://localhost:8983/solr/
 
 **`SOLR_MCP_JAR` must be an absolute path.** The child is launched relative to *this* process's
 working directory, which differs between `bootRun` and `java -jar`.
+
+**This client's logging cannot corrupt the stdio channel.** The SDK launches the child with
+`ProcessBuilder` pipes, so JSON-RPC travels over the *child's* stdin/stdout while this
+application's logs go to its own console — separate file descriptors in every profile, `cli`
+included. The child's stderr is drained by the SDK and re-surfaced as a client log line. The one
+hazard is on the server side: a stdio MCP server must never print non-JSON to its own stdout —
+that is the server jar's logging configuration, not this client's.
+
+Both stdio profiles nevertheless apply the canonical Spring AI stdio posture — banner off and
+console logging disabled:
+
+```yaml
+spring.main.banner-mode: off
+logging.threshold.console: "OFF"
+```
+
+The threshold is Boot's supported form of "console appender off"; an empty
+`logging.pattern.console` is *not* equivalent — Logback rejects it and prints its own
+`Empty or null pattern` status error. Stdio MCP interactions therefore produce no console output
+from this client. Startup failures still abort through `McpToolVerifier`, per-request failures
+surface as request errors, and logs still ship over OTLP where a collector is configured — the
+threshold affects only the console appender. Raise it back explicitly when debugging a child that
+will not start.
+
+One warning is beyond logging configuration: the JDK's JEP 498 `sun.misc.Unsafe` startup warning
+(triggered by protobuf-java via the OTLP exporter) is emitted by the JVM itself on stderr.
+`bootRun` passes `--sun-misc-unsafe-memory-access=allow` to silence it; `java -jar` runs add the
+same flag by hand (see the README's shell recipes).
 
 **Why this profile knows about Solr at all.** Nothing in this application talks to Solr directly —
 `SOLR_URL` is the server's setting. It has to be declared in the YAML because the MCP Java SDK does

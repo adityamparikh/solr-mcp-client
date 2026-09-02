@@ -19,8 +19,9 @@
  *
  * <p>Everything here concerns HTTP that this application <strong>serves</strong>: the versioned
  * controller, RFC 9457 error mapping, the inbound security posture, and the OpenAPI description.
- * The application is a REST service in every profile — profiles choose how it reaches Solr MCP, not
- * whether it has a web layer.
+ * The application is a REST service in every profile except {@code cli}, which replaces the web
+ * server with the interactive shell in {@link org.apache.solr.mcp.client.cli}; the {@code mcp-*}
+ * profiles choose how it reaches Solr MCP, never whether it has a web layer.
  *
  * <p>Nothing about the <em>outbound</em> connection to Solr MCP belongs here, even when that
  * connection also happens to speak HTTP; that lives in

@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.mcp.client.security)
     implementation(libs.spring.ai.openai)
   //  implementation(libs.spring.ai.anthropic)
+    implementation(libs.spring.shell.starter.ffm)
 
     testImplementation(libs.spring.boot.actuator.test)
     testImplementation(libs.spring.boot.opentelemetry.test)
@@ -83,7 +84,36 @@ tasks.withType<JavaCompile>().configureEach {
 dependencyManagement {
     imports {
         mavenBom("org.springframework.ai:spring-ai-bom:${libs.versions.spring.ai.get()}")
+        mavenBom("org.springframework.shell:spring-shell-dependencies:${libs.versions.spring.shell.get()}")
     }
+}
+
+// JLine's FFM terminal provider calls JEP 472 restricted methods, which the JDK warns about on
+// stderr from JDK 24 onwards. Following the Spring Shell build docs
+// (https://docs.spring.io/spring-shell/reference/building.html#_ffm), the executable jar grants
+// itself native access through its manifest, so plain `java -jar` starts the REPL warning-free.
+// The attribute is read only by the `java -jar` launcher: bootRun (which runs from classes) passes
+// the equivalent flag below, and a GraalVM native image would instead take
+// `--enable-native-access=ALL-UNNAMED` as a native-image build argument.
+tasks.bootJar {
+    manifest {
+        attributes("Enable-Native-Access" to "ALL-UNNAMED")
+    }
+}
+
+// Gradle gives the forked JVM an empty stdin, so under the cli profile the interactive shell
+// would read EOF and exit immediately. Wiring the build's own stdin through makes
+// `bootRun --args='--spring.profiles.active=cli,mcp-stdio'` usable; `java -jar` remains the
+// canonical way to run the REPL.
+//
+// The Unsafe flag silences the JDK 24+ (JEP 498) startup warning triggered by protobuf-java's
+// sun.misc.Unsafe.arrayBaseOffset use (pulled in by the OTLP exporter). Unlike native access,
+// JEP 498 defines no manifest attribute, so `java -jar` runs pass this one flag by hand (see
+// README). The native-access flag repeats the bootJar manifest grant for bootRun, which does not
+// launch through the jar.
+tasks.bootRun {
+    standardInput = System.`in`
+    jvmArgs("--sun-misc-unsafe-memory-access=allow", "--enable-native-access=ALL-UNNAMED")
 }
 
 // Every jar this project publishes carries the licence texts in META-INF, as an ASF release

@@ -5,6 +5,10 @@ cyclonedx = "3.4.1"
 sonarqube = "7.4.0.8496"
 jacoco = "0.8.15"
 spring-ai = "2.0.1"
+# Spring Shell 4 requires Spring Boot 4+; the version feeds the spring-shell-dependencies BOM
+# import in build.gradle.kts, so the starter itself stays unversioned like the other BOM-managed
+# libraries.
+spring-shell = "4.0.3"
 springdoc = "3.1.0"
 # Pre-1.0, and it sits in the auth path: McpHttpOAuth2Configuration hands it the whole job of
 # attaching the outbound service token. Treat a bump as a behavioural change to be read rather than
@@ -33,6 +37,11 @@ springdoc-openapi-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starte
 spring-ai-mcp-client = { module = "org.springframework.ai:spring-ai-starter-mcp-client" }
 mcp-client-security = { module = "org.springaicommunity:mcp-client-security-spring-boot", version.ref = "mcp-client-security" }
 spring-ai-openai = { module = "org.springframework.ai:spring-ai-starter-model-openai" }
+# The -ffm flavor bundles spring-shell-jline with JLine's FFM terminal provider (JDK 22+). The
+# plain starter's Console-based runner reads EOF and exits under any non-PTY stdin (IDE run
+# consoles); JLine falls back to a dumb terminal there instead, which is what keeps the REPL
+# usable outside a real terminal.
+spring-shell-starter-ffm = { module = "org.springframework.shell:spring-shell-starter-ffm" }
 spring-ai-anthropic = { module = "org.springframework.ai:spring-ai-starter-model-anthropic" }
 spring-boot-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }
 spring-boot-opentelemetry-test = { module = "org.springframework.boot:spring-boot-starter-opentelemetry-test" }

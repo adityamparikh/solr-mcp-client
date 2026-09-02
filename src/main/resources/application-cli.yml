@@ -1,0 +1,61 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The one profile that selects the INBOUND adapter: a Spring Shell REPL instead of the web server.
+# It says nothing about the outbound side, so compose it with exactly one mcp-* transport profile —
+# cli,mcp-stdio | cli,mcp-stdio-docker | cli,mcp-http. Activating `cli` alone also loses the
+# mcp-stdio default: spring.profiles.default is replaced by an explicit activation, never merged,
+# and McpToolVerifier then fails fast rather than starting a shell with zero Solr MCP tools.
+
+spring:
+  main:
+    # The REPL replaces the web server, never runs alongside it. The web package tolerates this:
+    # its security and CORS configurations are @ConditionalOnWebApplication(SERVLET), and the
+    # controller/advice load as inert beans.
+    web-application-type: none
+    banner-mode: off
+  shell:
+    interactive:
+      # true is the 4.0.x default; it is spelled out because `false` would NOT mean "no shell" —
+      # it selects the non-interactive (arguments-as-command) runner. The shell is switched off
+      # outside this profile by ShellSuppressionConfiguration, not by any property.
+      enabled: true
+    context:
+      # Close the application context when the REPL exits. Without this, `exit` returns from the
+      # runner but the MCP transport (and in mcp-stdio the child server process) keeps the JVM
+      # alive. Cli context tests must pin this back to false, or the ready-event listener closes
+      # the test context as soon as it starts.
+      close: true
+
+logging:
+  # The REPL owns the terminal, so the console appender is turned off exactly as in the stdio
+  # profiles (same OFF-threshold mechanism — see application-mcp-stdio.yml for why the threshold
+  # and not an empty pattern). Without this, any recurring WARN corrupts the prompt and makes the
+  # shell unusable — e.g. a failing OTLP metrics export (IDE-injected collector URL, or the
+  # default localhost:4318 with no collector listening) stack-traces onto the prompt every
+  # publish interval. Declared here and not only in the mcp-* files because the cli,mcp-http
+  # composition would otherwise leave the console appender on.
+  threshold:
+    console: "OFF"
+
+management:
+  otlp:
+    metrics:
+      export:
+        # With the console silenced, a failing OTLP push (no collector on the default
+        # localhost:4318, or an IDE-injected collector speaking gRPC where Micrometer posts
+        # HTTP/1.1 protobuf) would keep retrying invisibly every publish interval. A REPL session
+        # has no metrics consumer, so the push is off at the source rather than merely muted.
+        enabled: false

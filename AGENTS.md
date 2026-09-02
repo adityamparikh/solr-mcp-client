@@ -12,6 +12,7 @@
 ./gradlew test
 ./gradlew bootRun
 ./gradlew bootRun --args='--spring.profiles.active=mcp-http'
+./gradlew bootRun --console=plain --args='--spring.profiles.active=cli,mcp-stdio'   # interactive shell
 ./gradlew sonar
 ```
 
@@ -29,8 +30,11 @@ grab-bag and no layer packages.
   CLI) injects `SolrAssistant` directly instead of calling the application's own HTTP endpoints.
 - `mcp`: everything about reaching the Solr MCP server — the outbound OAuth2 service token for the
   `mcp-http` profile and the startup check that a connection is configured at all.
-- `web`: the REST service this application *is* — controller, RFC 9457 error mapping, inbound
-  security posture, OpenAPI. Transport only; no business logic.
+- `web`: the REST service this application serves by default — controller, RFC 9457 error mapping,
+  inbound security posture, OpenAPI. Transport only; no business logic.
+- `cli`: the interactive shell the `cli` profile serves instead — Spring Shell commands over
+  `SolrAssistant` (injected directly, reusing `ChatRequest`/`ChatReply`), plus the no-op runner
+  that keeps every other profile REPL-free. Transport only; no business logic.
 
 There is no `model` package. Which chat model provider is active is not decided in code at all: it
 follows from the single `spring-ai-starter-model-*` dependency on the classpath, which Spring AI
@@ -104,9 +108,18 @@ shared `config` or `service` package.
 
 ## Configuration and security
 
-- Profiles name the **outbound MCP transport**, never how this application serves its own API — it
-  is a REST service in every profile. Hence the `mcp-` prefix. Do not add a profile that changes the
-  web layer.
+- Profiles come in exactly two axes. The `mcp-*` profiles name the **outbound MCP transport**, and
+  the single `cli` profile names the **inbound adapter** — a Spring Shell REPL in place of the web
+  server (`spring.main.web-application-type=none` in `application-cli.yml`). The axes compose
+  (`cli,mcp-http` is legal); do not add further profiles that change the web layer, and keep the
+  `mcp-` prefix for transports. Activating `cli` alone drops the `mcp-stdio` default —
+  `spring.profiles.default` is replaced by an explicit activation, never merged — so the CLI is
+  always run as `cli,<mcp-profile>`.
+- Spring Shell has **no property that disables the shell** (`spring.shell.interactive.enabled=false`
+  selects non-interactive mode instead). `ShellSuppressionConfiguration` overrides the
+  auto-configured `springShellApplicationRunner` with a no-op under `@Profile("!cli")`; that back-off
+  is by `@ConditionalOnMissingBean`, so adding any other `ApplicationRunner` bean would silently
+  disable the `cli` shell — use an `ApplicationListener` for startup work instead.
 - `mcp-stdio` is the default and launches the local Solr MCP process. `SOLR_MCP_JAR` must be an
   absolute path. Pass the child only what it cannot default or inherit: `SOLR_URL`, which the SDK's
   environment allowlist would otherwise drop. Do not name the server's profile — it defaults to
@@ -164,6 +177,11 @@ shared `config` or `service` package.
   launching a child process or opening a network connection, and replace `McpToolVerifier` with
   `@MockitoBean`. The property alone is not enough: verification lists the server's tools, which
   drives Spring AI's `LifecycleInitializer` and opens the connection the property deferred.
+- A `@SpringBootTest` executes `ApplicationRunner` beans. Context tests that activate the `cli`
+  profile must therefore replace the shell's runner —
+  `@MockitoBean(name = "springShellApplicationRunner")` — or the REPL starts reading the test JVM's
+  console, and must pin `spring.shell.context.close=false` or `application-cli.yml`'s close-on-exit
+  listener shuts the test context down as soon as it is ready.
 - Do not require a live Solr, MCP server, OpenAI account or identity provider for ordinary runs.
 - When stubbing a `ChatModel` for a tool-calling test, `getOptions()` must return
   `ToolCallingChatOptions`, not `ChatOptions.builder().build()`. `ToolCallingAdvisor.adviseCall`

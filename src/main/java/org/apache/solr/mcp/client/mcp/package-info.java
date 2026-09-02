@@ -39,9 +39,10 @@
  * <p>A single startup check guards the dependency: the server's tool list must be non-empty, which
  * answers both "is a connection configured" and "is this the right server" at once.
  *
- * <p>The inbound REST facade is {@link org.apache.solr.mcp.client.web}. These packages are
- * independent: swapping the transport changes nothing in {@code web}, and replacing the REST facade
- * with an in-process UI changes nothing here.
+ * <p>The inbound adapters are {@link org.apache.solr.mcp.client.web} (the REST facade) and
+ * {@link org.apache.solr.mcp.client.cli} (the shell). These packages are independent: swapping the
+ * transport changes nothing inbound, and the {@code mcp-*} profiles compose with the {@code cli}
+ * profile unchanged — {@code cli,mcp-http} is the same outbound wiring as {@code mcp-http} alone.
  */
 @NullMarked
 package org.apache.solr.mcp.client.mcp;
