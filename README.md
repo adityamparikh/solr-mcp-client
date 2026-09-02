@@ -146,6 +146,8 @@ exit
 One conversation spans the shell session; `new` releases it and starts another. Unlike the REST
 service, the shell needs the model key at first use in the terminal that runs it.
 
+![A shell session: the assistant reads the films collection schema, queries genre:comedy and lists the matching films](docs/images/cli-shell-session.png)
+
 The shell runs on Spring Shell's JLine runner (the `-ffm` starter flavor), so it also works in a
 non-PTY console — an IDE run configuration's output window included — by falling back to a JLine
 *dumb terminal*: prompt and input work, at the cost of line editing, history and colors. A real
