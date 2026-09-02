@@ -22,10 +22,12 @@ import org.apache.solr.mcp.client.assistant.SolrAssistant.ChatRequest;
 import org.apache.solr.mcp.client.assistant.SolrAssistant.EmptyAnswerException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -64,8 +66,8 @@ class SolrAssistantCommandsTest {
                 .isEqualTo(conversationId.getAllValues().getLast());
         // The id is this adapter's own choice of format; asserting it parses keeps it an opaque
         // but well-formed token rather than something a future change could turn into "" by
-        // accident.
-        assertThat(UUID.fromString(conversationId.getValue())).isNotNull();
+        // accident. The parse itself is the assertion — fromString throws or returns non-null.
+        assertThatCode(() -> UUID.fromString(conversationId.getValue())).doesNotThrowAnyException();
     }
 
     @Test
@@ -106,5 +108,24 @@ class SolrAssistantCommandsTest {
                 .thenThrow(new EmptyAnswerException("no content for conversation x"));
 
         assertThat(commands.solrMcp("anything")).contains("The model returned no content");
+    }
+
+    @Test
+    void reportsAnUpstreamFailureAsTextAndKeepsTheSessionAlive() {
+        // Same upstream taxonomy the REST facade maps to 502/504, reported as a line of text. The
+        // exception's message must appear in it: console logging is off under the cli profile, so
+        // this line is the only diagnostics the operator gets.
+        when(assistant.send(anyString(), any(ChatRequest.class)))
+                .thenThrow(new ResourceAccessException("Connection refused to solr-mcp"));
+
+        String answer = commands.solrMcp("anything");
+
+        assertThat(answer)
+                .contains("failed upstream")
+                .contains("Connection refused to solr-mcp");
+
+        // The session carries on: the next ask still reaches the assistant.
+        when(assistant.send(anyString(), any(ChatRequest.class))).thenReturn(new ChatReply("ok"));
+        assertThat(commands.solrMcp("again")).isEqualTo("ok");
     }
 }
