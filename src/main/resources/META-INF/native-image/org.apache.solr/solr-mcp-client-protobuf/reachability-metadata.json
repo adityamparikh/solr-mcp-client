@@ -1,0 +1,13 @@
+{
+  "reflection": [
+    {
+      "type": "com.google.protobuf.ExtensionRegistry",
+      "methods": [
+        {
+          "name": "getEmptyRegistry",
+          "parameterTypes": []
+        }
+      ]
+    }
+  ]
+}

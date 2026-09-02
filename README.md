@@ -53,6 +53,7 @@ REST service on the same port in every profile.
 | [Logging the LLM exchange](docs/logging.md) | Seeing the full tool negotiation with `SimpleLoggerAdvisor` |
 | [Security posture](docs/security.md) | Why inbound is unauthenticated, what OAuth2 actually secures, secrets and error leakage |
 | [Architecture](docs/architecture.md) | Package layout and the seam a future UI binds to |
+| [GraalVM native image](docs/native-image.md) | One binary per run mode: baking profiles with `-PaotProfiles`, the bake-vs-launch matrix, startup caveats |
 
 [AGENTS.md](AGENTS.md) holds the wiring rules and conventions this codebase holds itself to.
 
@@ -114,6 +115,9 @@ JVM flags for a clean console — see the comments on `bootJar` and `bootRun` in
 `mcp-stdio` is a **default** profile, not an active one: naming any profile explicitly *replaces*
 it. There is no "no transport" fallback — see
 [Startup verification](docs/transports.md#startup-verification).
+
+`./gradlew nativeCompile` builds a GraalVM native image — one binary per run mode; see
+[GraalVM native image](docs/native-image.md).
 
 ---
 
