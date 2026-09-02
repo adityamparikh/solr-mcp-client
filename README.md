@@ -53,7 +53,6 @@ REST service on the same port in every profile.
 | [Logging the LLM exchange](docs/logging.md) | Seeing the full tool negotiation with `SimpleLoggerAdvisor` |
 | [Security posture](docs/security.md) | Why inbound is unauthenticated, what OAuth2 actually secures, secrets and error leakage |
 | [Architecture](docs/architecture.md) | Package layout and the seam a future UI binds to |
-| [Framework comparison](docs/framework-comparison.md) | MCP feature parity vs JVM (LangChain4j, Koog, Embabel) and Python (LangGraph, OpenAI Agents SDK, PydanticAI, Google ADK, CrewAI) frameworks |
 
 [AGENTS.md](AGENTS.md) holds the wiring rules and conventions this codebase holds itself to.
 
@@ -106,12 +105,11 @@ Or open Swagger UI at <http://localhost:9090/swagger-ui.html>.
 # pick a different outbound transport
 ./gradlew bootRun --args='--spring.profiles.active=mcp-stdio-docker'
 ./gradlew bootRun --args='--spring.profiles.active=mcp-http'
-
-# or run the packaged jar
-./gradlew bootJar
-java -jar build/libs/solr-mcp-client-0.0.1-SNAPSHOT.jar
-java -jar build/libs/solr-mcp-client-0.0.1-SNAPSHOT.jar --spring.profiles.active=mcp-http
 ```
+
+`./gradlew bootJar` produces the deployable jar in `build/libs/`; running it directly needs two
+JVM flags for a clean console — see the comments on `bootJar` and `bootRun` in
+`build.gradle.kts`.
 
 `mcp-stdio` is a **default** profile, not an active one: naming any profile explicitly *replaces*
 it. There is no "no transport" fallback — see
@@ -126,16 +124,8 @@ MCP tools, same conversation memory, no HTTP. It composes with any of the three 
 must always be composed (activating `cli` alone would also replace the `mcp-stdio` default):
 
 ```bash
-# The flag silences the JEP 498 JVM stderr warning from protobuf-java (OTLP exporter), which no
-# logging property can reach and which has no manifest equivalent. The JEP 472 native-access
-# warning from JLine's FFM terminal provider needs no flag: the jar's manifest carries
-# Enable-Native-Access: ALL-UNNAMED (see build.gradle.kts).
-java --sun-misc-unsafe-memory-access=allow -jar build/libs/solr-mcp-client-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli,mcp-stdio
-java --sun-misc-unsafe-memory-access=allow -jar build/libs/solr-mcp-client-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli,mcp-stdio-docker
-java --sun-misc-unsafe-memory-access=allow -jar build/libs/solr-mcp-client-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli,mcp-http
-
-# or through Gradle (stdin and both warning-suppression flags are wired into bootRun)
 ./gradlew bootRun --console=plain --args='--spring.profiles.active=cli,mcp-stdio'
+# or: cli,mcp-stdio-docker | cli,mcp-http
 ```
 
 At the prompt, the question is one quoted argument (unquoted words would be re-joined with
@@ -155,9 +145,7 @@ service, the shell needs the model key at first use in the terminal that runs it
 The shell runs on Spring Shell's JLine runner (the `-ffm` starter flavor), so it also works in a
 non-PTY console — an IDE run configuration's output window included — by falling back to a JLine
 *dumb terminal*: prompt and input work, at the cost of line editing, history and colors. A real
-terminal (or the IDE's Terminal tab) gives the full experience. IDE run configurations build their
-own JVM command line, so add the two flags above to their VM options to keep the console clean —
-the flags wired into `bootRun` do not apply there.
+terminal (or the IDE's Terminal tab) gives the full experience.
 
 ---
 
