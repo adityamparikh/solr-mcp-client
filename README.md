@@ -119,6 +119,26 @@ it. There is no "no transport" fallback — see
 `./gradlew nativeCompile` builds a GraalVM native image — one binary per run mode; see
 [GraalVM native image](docs/native-image.md).
 
+### Fast startup with the JDK 25 AOT cache
+
+For faster startup without giving up runtime profile selection, build a JVM AOT cache
+(JEP 483/514) instead of a [GraalVM native image](docs/native-image.md): a native image freezes
+the bean graph for whichever profiles were active during `processAot`, so one binary cannot serve
+both the web facade and the `cli` REPL, while the AOT cache only pre-loads and pre-links classes
+and leaves every profile composition available at launch.
+
+```bash
+scripts/build-aot-cache.sh            # bootJar + extract + training run -> build/aot-cache/app.aot
+scripts/build-aot-cache.sh cli,mcp-http   # optional: train with the composition you launch most
+
+# then launch from the extracted directory with any profiles
+cd build/aot-cache
+java --sun-misc-unsafe-memory-access=allow -XX:AOTCache=app.aot -jar solr-mcp-client-0.0.1-SNAPSHOT.jar --spring.profiles.active=cli,mcp-http
+```
+
+The cache must be used with the extracted jar layout it was trained on, and is invalidated by
+rebuilding the jar or changing the JDK — rerun the script after either.
+
 ---
 
 ## Interactive shell (`cli` profile)
