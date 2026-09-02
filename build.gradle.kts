@@ -129,10 +129,13 @@ tasks.bootJar {
 // closed-world assumption freezes bean-shaping conditions at build time, so this property decides
 // what the binary IS — web facade vs cli REPL, stdio vs http transport. Without it the image is
 // the default composition (web, mcp-stdio). mcp-stdio vs mcp-stdio-docker differ only in property
-// values and stay switchable at run time. Run `clean` when changing the value: the injected args
-// are not a tracked task input, and a stale AOT output baked for another composition fails only
-// at binary startup.
+// values and stay switchable at run time.
+//
+// The property is registered as a task input because args alone are not tracked: without the
+// registration, switching the value would silently reuse the previous composition's AOT output,
+// which fails only at binary startup.
 tasks.withType<org.springframework.boot.gradle.tasks.aot.ProcessAot>().configureEach {
+    inputs.property("aotProfiles", providers.gradleProperty("aotProfiles").orElse(""))
     providers.gradleProperty("aotProfiles").orNull?.let {
         args("--spring.profiles.active=$it")
     }

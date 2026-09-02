@@ -124,10 +124,9 @@ four images for the six run modes: `mcp-stdio` vs `mcp-stdio-docker` differ only
 values, and that switch alone stays available at run time.
 
 Bake the composition with `-PaotProfiles` (it feeds `processAot`; no credentials or servers are
-needed at build time). Always `clean` when changing the value — the injected profiles are not a
-tracked task input, and a stale AOT output baked for another composition fails only at binary
-startup. Each build overwrites `build/native/nativeCompile/solr-mcp-client`, so move the binary
-aside before building the next.
+needed at build time). The property is a tracked task input, so changing it re-runs AOT
+processing on its own. Each build overwrites `build/native/nativeCompile/solr-mcp-client`, so
+move the binary aside before building the next.
 
 | Bake with | Launch as |
 | --- | --- |
@@ -137,7 +136,7 @@ aside before building the next.
 | `-PaotProfiles=cli,mcp-http` | `--spring.profiles.active=cli,mcp-http` |
 
 ```bash
-./gradlew clean nativeCompile -PaotProfiles=cli,mcp-stdio
+./gradlew nativeCompile -PaotProfiles=cli,mcp-stdio
 mv build/native/nativeCompile/solr-mcp-client solr-mcp-client-cli-stdio
 
 export OPENAI_API_KEY=sk-...
@@ -148,6 +147,10 @@ export SOLR_MCP_JAR=/absolute/path/to/solr-mcp.jar
 At launch, activate the same profiles the image was baked with (the `-docker` variant being the
 one allowed swap); the usual environment applies unchanged. No JVM flags are needed: native
 access is granted at image build time, and the JEP 498 unsafe warning is a JVM-only concern.
+
+If startup fails — most commonly because no Solr MCP server is reachable — the process prints
+`Application run failed` but may not exit on its own: the MCP SDK's executor threads outlive the
+cancelled startup and keep the process alive, so kill it rather than waiting.
 
 ---
 
