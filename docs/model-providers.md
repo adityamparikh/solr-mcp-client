@@ -168,7 +168,11 @@ before assuming the shape.
 
 ## Local models
 
-**Ollama** has a first-class starter:
+**Ollama** has a first-class starter. It also serves an OpenAI-compatible API on `/v1`, so the
+base-url trick below would work — but prefer the dedicated starter: *OpenAI-compatible* means the
+request and response shapes match, not that every behaviour does, and tool calling is exactly the
+area where compatibility shims tend to diverge. Use the starter written for the server you are
+actually running.
 
 ```toml
 spring-ai-ollama = { module = "org.springframework.ai:spring-ai-starter-model-ollama" }
@@ -209,6 +213,31 @@ model pull-on-start behaviour and the full option list.
 >
 > Bigger windows cost memory, so size it to the model and machine rather than maximising it.
 
+**Docker Model Runner** ships with Docker Desktop — enable it under **Settings → AI → Enable
+Docker Model Runner**. It serves an OpenAI-compatible API, so the OpenAI starter stays where it is
+and only configuration changes. Worth knowing about here specifically: this project already runs
+the Solr MCP server as a container under the `mcp-stdio-docker` profile, so the prerequisite is
+usually already installed.
+
+```bash
+docker model pull hf.co/lmstudio-community/Qwen3.5-35B-A3B-GGUF:Q4_K_M
+docker model ls          # the model property below wants the name exactly as this prints it
+```
+
+```yaml
+spring:
+  ai:
+    openai:
+      base-url: http://localhost:12434/v1
+      api-key: not-needed
+      chat:
+        model: huggingface.co/lmstudio-community/qwen3.5-35b-a3b-gguf:Q4_K_M
+```
+
+The model name is the full registry reference, not a short tag — take it from `docker model ls`
+rather than retyping the pull argument, since the pull accepts `hf.co/…` while the served name is
+spelled `huggingface.co/…`.
+
 **Anything else that serves the OpenAI API locally** — llama.cpp's `llama-server`, vLLM, LM Studio,
 LocalAI, Ollama's own `/v1` shim — works through the OpenAI starter with a dummy key, since most
 local servers do not check it:
@@ -217,11 +246,41 @@ local servers do not check it:
 spring:
   ai:
     openai:
-      base-url: http://localhost:8000       # llama-server / vLLM / LM Studio / LocalAI
+      # Ports differ per server: LM Studio 1234, llama-server 8080, vLLM 8000, LocalAI 8080.
+      # Append /v1 unless the server already includes it in the root it advertises.
+      base-url: http://localhost:1234/v1    # LM Studio
       api-key: not-needed
       chat:
         model: <whatever the server calls it>
 ```
+
+## Model loading, and why the first question is slow
+
+A local runtime does not hold the model in memory continuously. The first request after a cold
+start — or after an idle period long enough to have unloaded it — pays for loading the weights
+before any token is produced. Subsequent requests are much faster.
+
+That shows up worse here than in a single-turn demo. An answer in this application is a tool loop:
+the model reads a collection's schema, then issues a query, then writes the answer, so a cold load
+lands on top of several round-trips. Nothing reports it while it happens: the shell blocks until
+the answer exists, so **the symptom is a shell that looks hung.** Streaming does not rescue this
+either — Spring AI resolves the tool loop underneath the publisher and filters the intermediate
+responses out, so only the model's final text ever reaches a subscriber.
+
+No configured timeout will cut it short, which is worth knowing before you go looking for one: the
+only timeout set in `application.yml` is `spring.ai.mcp.client.request-timeout`, and that governs
+reaching the Solr MCP server, not the model. A slow model is simply waited on.
+
+Each runtime unloads on its own schedule, and each lets you extend it:
+
+| Runtime | Unloads after | Change it with |
+| --- | --- | --- |
+| Ollama | 5 minutes idle | `export OLLAMA_KEEP_ALIVE=30m` (or `-1` to keep it loaded indefinitely), then restart Ollama |
+| Docker Model Runner | 5 minutes idle | `docker model configure <model> …` |
+| LM Studio | 60 minutes idle | **Max Idle TTL**, under Developer settings |
+
+Raising the keep-alive trades resident memory for latency. For interactive shell use it is usually
+the right trade; for a machine also running Solr and the MCP server container, watch what is left.
 
 ## The tool-calling constraint
 
