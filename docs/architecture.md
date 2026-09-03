@@ -33,8 +33,29 @@ library (`0.0.1-SNAPSHOT`, not on Maven Central, still on Spring Boot 3.4.5), so
 adding `com.vaadin:vaadin-spring-boot-starter` and porting its chat view onto `SolrAssistant`, not
 depending on it. A React frontend lives on that project's `hilla` branch.
 
-Two things worth doing at the same time:
+## Streaming
 
-- add a streaming variant to `SolrAssistant` (`chatClient.prompt()...stream()`), since chat UIs
-  render tokens as they arrive;
-- expose it over SSE from the REST facade for out-of-process clients.
+`SolrAssistant.stream()` is the streaming counterpart of `send()` — same conversation scoping, same
+MCP tools, delivered as the model produces it. Both adapters expose it: the REST facade as
+`POST /api/v1/stream` (streamed plain text) and the shell as its `solr-mcp stream` command. A UI
+binds to the seam method, not to either adapter.
+
+Two things about it are worth knowing before building on it.
+
+**Only the final answer streams.** Spring AI resolves the tool loop underneath the publisher and
+filters the intermediate tool-call responses out before a subscriber sees them —
+`ToolCallingAdvisor.adviseStream` ends with `.filter(ccr -> !isToolCallResponse(ccr.chatResponse()))`.
+So the wait for the tool round-trips is silent, and streaming shortens the wait for a *long* answer
+rather than a *slow* one. Surfacing which tools ran, and with what arguments, means observing the
+chain at a second point — a `StreamAdvisor` at order `0`, beside `SimpleLoggerAdvisor`, which sits
+*inside* the tool loop and so sees each round's response before that filter applies. That would be
+the foundation for a UI that shows the query behind an answer; it is deliberately not built yet.
+
+**Servlet, not WebFlux, is not an obstacle.** Streaming a response body is a Servlet async feature;
+WebFlux is about concurrency scaling, which `spring.threads.virtual.enabled` already addresses here.
+Reactor is on the classpath transitively, so Spring MVC adapts a returned `Flux` onto Servlet async
+without any change of server.
+
+The remaining gap for a chat UI is a widened reply type carrying tool calls alongside tokens. Adding
+`Flux<AssistantEvent> streamEvents(...)` later is additive and breaks neither `send()` nor
+`stream()`.

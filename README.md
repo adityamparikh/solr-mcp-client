@@ -132,19 +132,26 @@ must always be composed (activating `cli` alone would also replace the `mcp-stdi
 # or: cli,mcp-stdio-docker | cli,mcp-http
 ```
 
-At the prompt, the question is one quoted argument (unquoted words would be re-joined with
-commas by the shell's argument conversion):
+The commands are a group under the `solr-mcp` prefix, so each is two words. The question itself
+is one quoted argument (unquoted words would be re-joined with commas by the shell's argument
+conversion):
 
 ```
-solr-mcp "how many documents are in the books collection"
-solr-mcp "and how many of those are in stock" # follow-ups continue the conversation
-new                                           # forget the conversation, start fresh
-help                                          # everything else Spring Shell offers
+solr-mcp chat "how many documents are in the books collection"
+solr-mcp chat "and how many of those are in stock" # follow-ups continue the conversation
+solr-mcp stream "summarise the films collection"   # same question, printed as it arrives
+solr-mcp new                                       # forget the conversation, start fresh
+help                                               # everything else Spring Shell offers
 exit
 ```
 
-One conversation spans the shell session; `new` releases it and starts another. Unlike the REST
-service, the shell needs the model key at first use in the terminal that runs it.
+`solr-mcp stream` is `solr-mcp chat` with the answer printed as the model produces it rather than
+when it is finished; both share the one conversation, so they can be mixed freely. Only the final
+answer streams — the tool negotiation is as silent there as on `solr-mcp chat` — so streaming pays
+off on long answers, not on slow ones.
+
+One conversation spans the shell session; `solr-mcp new` releases it and starts another. Unlike the
+REST service, the shell needs the model key at first use in the terminal that runs it.
 
 ![A shell session: the assistant reads the films collection schema, queries genre:comedy and lists the matching films](docs/images/cli-shell-session.png)
 
@@ -160,6 +167,7 @@ terminal (or the IDE's Terminal tab) gives the full experience.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/chat` | Ask the assistant a question |
+| `POST` | `/api/v1/stream` | The same turn, streamed as plain text |
 | `DELETE` | `/api/v1/chat/{conversationId}` | Release a conversation's retained turns |
 | `GET` | `/api-docs` | OpenAPI 3 document |
 | `GET` | `/swagger-ui.html` | Swagger UI |

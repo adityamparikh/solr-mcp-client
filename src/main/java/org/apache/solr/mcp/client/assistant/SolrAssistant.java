@@ -20,6 +20,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 /**
  * The Solr assistant, expressed independently of any transport.
@@ -61,7 +62,7 @@ public class SolrAssistant {
      * the model requires them.
      *
      * <p>Blocks for the whole exchange, tool round-trips included, so a single call may take far
-     * longer than one model request.
+     * longer than one model request. {@link #stream} is the same exchange delivered incrementally.
      *
      * @param conversationId scopes the retained turns; an id never seen before starts a new
      *                       conversation rather than failing
@@ -84,6 +85,39 @@ public class SolrAssistant {
                     "The chat model returned no content for conversation " + conversationId);
         }
         return new ChatReply(answer);
+    }
+
+    /**
+     * The streaming counterpart of {@link #send}: the same exchange against the same Solr MCP
+     * tools, scoped to the same conversation, delivered as the model produces it.
+     *
+     * <p>Only the final answer's text is streamed. Spring AI runs the tool loop underneath this
+     * publisher and drops the intermediate tool-call responses before a subscriber sees them
+     * ({@code ToolCallingAdvisor} filters on {@code isToolCallResponse}), so a subscriber observes
+     * silence for the whole negotiation and then the answer. Surfacing which tools ran would take a
+     * second observation point inside the advisor chain, not a change here.
+     *
+     * <p>The returned publisher is cold — Spring AI builds the model call inside
+     * {@code Flux.deferContextual} — so no request is issued until something subscribes. The
+     * builder chain below is deliberately left outside any further {@code defer}: it allocates the
+     * request and assembles the advisor chain and nothing more, and letting a failure there throw
+     * synchronously is what lets the REST facade answer with a problem detail while the response is
+     * still uncommitted, instead of an error frame inside a 200.
+     *
+     * @param conversationId scopes the retained turns exactly as in {@link #send}
+     * @param request        the user's turn
+     * @return the answer's content deltas, in the order the model produced them; fails with
+     * {@link EmptyAnswerException} if the model completes having emitted nothing, which is this
+     * path's spelling of the null content {@link #send} rejects
+     */
+    public Flux<String> stream(String conversationId, ChatRequest request) {
+        return chatClient.prompt()
+                .user(request.message())
+                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .stream()
+                .content()
+                .switchIfEmpty(Flux.error(() -> new EmptyAnswerException(
+                        "The chat model returned no content for conversation " + conversationId)));
     }
 
     /**
