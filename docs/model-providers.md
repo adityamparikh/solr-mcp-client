@@ -190,6 +190,25 @@ spring:
 See the [Ollama chat docs](https://docs.spring.io/spring-ai/reference/api/chat/ollama-chat.html) for
 model pull-on-start behaviour and the full option list.
 
+> **Raise the context window, or tool calling fails in a way that looks like the model not
+> supporting it.** Ollama's own `num_ctx` default is small and version-dependent, and Spring AI sets
+> no default of its own — so the default applies. This application attaches the whole Solr MCP
+> toolset, and a schema response is large; overflow that window and the tool definitions are the
+> first thing dropped. The model then answers from its own knowledge, with no error — the *exact*
+> symptom described in [The tool-calling constraint](#the-tool-calling-constraint) below, which is
+> why the two are easy to confuse. If a tool-calling model still never calls Solr, raise this before
+> concluding the model is at fault:
+>
+> ```yaml
+> spring:
+>   ai:
+>     ollama:
+>       chat:
+>         num-ctx: 32768        # flat form; .options.num-ctx is deprecated in favour of it
+> ```
+>
+> Bigger windows cost memory, so size it to the model and machine rather than maximising it.
+
 **Anything else that serves the OpenAI API locally** — llama.cpp's `llama-server`, vLLM, LM Studio,
 LocalAI, Ollama's own `/v1` shim — works through the OpenAI starter with a dummy key, since most
 local servers do not check it:

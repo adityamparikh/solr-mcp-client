@@ -27,9 +27,13 @@ spring:
   ai:
     # Which provider is active is not decided here, and not in code either: it is decided by which
     # spring-ai-starter-model-* dependency is on the classpath. Exactly one is declared in
-    # build.gradle.kts (today spring-ai-anthropic), Spring AI auto-configures the single ChatModel
-    # it finds, and everything downstream sees only ChatClient. Switching providers means swapping
-    # that dependency and exporting the matching key — no property below selects anything.
+    # build.gradle.kts — read that file for which one. A provider named here instead would go stale
+    # the moment the dependency is swapped, since nothing makes the two move together; this comment
+    # said "anthropic" for as long as the build said openai, and cost a reader the wrong diagnosis.
+    # Spring AI auto-configures the single ChatModel it finds, and everything downstream sees only
+    # ChatClient. Switching providers means swapping that dependency and exporting the matching key
+    # — no property below selects anything. docs/model-providers.md covers the swap end to end,
+    # including local models and the tool-calling constraint they run into.
     #
     # Both provider blocks are kept so that swap stays a one-line build change. The block for an
     # absent starter is inert — nothing binds those properties, so its ${...} placeholders are
