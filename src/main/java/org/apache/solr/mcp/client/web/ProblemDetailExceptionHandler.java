@@ -18,6 +18,7 @@ package org.apache.solr.mcp.client.web;
 
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpTransportException;
+import jakarta.servlet.http.HttpServletResponse;
 import org.apache.solr.mcp.client.assistant.SolrAssistant;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -120,8 +121,9 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     /** Retryable upstream conditions: an I/O timeout, or a transport that dropped mid-call. */
     @ExceptionHandler({ResourceAccessException.class, McpTransportException.class})
     @ResponseStatus(HttpStatus.GATEWAY_TIMEOUT)
-    ProblemDetail handleUpstreamUnavailable(RuntimeException exception) {
+    ProblemDetail handleUpstreamUnavailable(RuntimeException exception, HttpServletResponse response) {
         log.warn("Transient upstream failure serving a chat request", exception);
+        rethrowIfCommitted(exception, response);
         return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL, "Upstream Unavailable");
     }
 
@@ -139,9 +141,32 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
             ToolCallLimitExceededException.class, OAuth2AuthorizationException.class,
             SolrAssistant.EmptyAnswerException.class})
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
-    ProblemDetail handleUpstreamFailure(RuntimeException exception) {
+    ProblemDetail handleUpstreamFailure(RuntimeException exception, HttpServletResponse response) {
         log.error("Upstream failure serving a chat request", exception);
+        rethrowIfCommitted(exception, response);
         return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL, "Upstream Request Failed");
+    }
+
+    /**
+     * Declines to handle a failure that arrives too late to be reported.
+     *
+     * <p>This advice can only produce a problem detail while the response is uncommitted. Past
+     * that point the status and headers are already on the wire, and returning one anyway would
+     * not replace the response — it would append JSON to whatever the handler had already written,
+     * as {@code POST /api/v1/stream} does once a delta has flushed. The result parses as
+     * neither the streamed text nor a problem detail.
+     *
+     * <p>Rethrowing the very same instance is how an {@code @ExceptionHandler} says it does not
+     * handle a case: {@code ExceptionHandlerExceptionResolver} compares the thrown exception with
+     * the one it dispatched and, finding them identical, leaves the original unresolved without
+     * logging a failure of its own. The container then aborts the response, which reaches the
+     * client as a body that ends without its terminating chunk — the only failure signal available
+     * once a {@code 200} has been sent. The cause has already been logged by the caller.
+     */
+    private static void rethrowIfCommitted(RuntimeException exception, HttpServletResponse response) {
+        if (response.isCommitted()) {
+            throw exception;
+        }
     }
 
     /**

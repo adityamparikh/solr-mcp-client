@@ -23,7 +23,6 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * Builds the Solr assistant's {@link ChatClient} from the auto-configured {@link ChatClient.Builder}.
@@ -86,6 +85,15 @@ import reactor.core.scheduler.Schedulers;
  *       would move it outside and quietly reduce it to logging only the first and last of those.
  * </ul>
  *
+ * <p>No advisor here sets a Reactor scheduler, which leaves each on {@code BaseAdvisor}'s
+ * {@code boundedElastic} default — the form the Spring AI reference documents. That default is a
+ * static that a GraalVM native image bakes in as null
+ * (<a href="https://github.com/spring-projects/spring-ai/issues/4714">spring-ai#4714</a>), failing
+ * every advisor's constructor assertion at run time on the native image only. The fix is at the
+ * root, in {@code build.gradle.kts}: {@code --initialize-at-run-time} on {@code BaseAdvisor}. It
+ * has to live there rather than here, because {@link SimpleLoggerAdvisor} and the per-request
+ * {@code ToolCallingAdvisor} offer no way to set a scheduler at all.
+ *
  * <p>{@code SimpleLoggerAdvisor} logs at DEBUG and is registered unconditionally; it self-guards
  * with {@code isDebugEnabled()}, so it costs a boolean check per pass until switched on with
  * {@code logging.level.org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor=DEBUG}. Treat
@@ -115,16 +123,7 @@ class ChatClientConfiguration {
         return chatClientBuilder
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(
-                        // The scheduler is spelled out even though it is exactly the builder's
-                        // default: the default is read from BaseAdvisor.DEFAULT_SCHEDULER, a
-                        // static that a GraalVM native image bakes in as null
-                        // (https://github.com/spring-projects/spring-ai/issues/4714), which fails
-                        // this builder's constructor assertion at startup — on the native image
-                        // only, and only at run time. Only the streaming path ever *uses* the
-                        // scheduler, and this application is call()-only throughout.
-                        MessageChatMemoryAdvisor.builder(chatMemory)
-                                .scheduler(Schedulers.boundedElastic())
-                                .build(),
+                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
                         SimpleLoggerAdvisor.builder().build())
                 .defaultTools(mcpToolCallbacks)
                 .build();

@@ -29,16 +29,19 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import reactor.core.publisher.Flux;
 
 import static java.util.Objects.requireNonNull;
 import static org.apache.solr.mcp.client.web.SolrAssistantController.CONVERSATION_ID_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -184,11 +187,153 @@ class SolrAssistantControllerTest {
     }
 
     @Test
+    void streamsTheAnswerAsPlainText() throws Exception {
+        given(assistant.stream("user-7:session-4", new ChatRequest("Find documents about SolrCloud")))
+                .willReturn(Flux.just("I found ", "3 ", "documents."));
+
+        String body = streamBody(post("/api/v1/stream")
+                .header(CONVERSATION_ID_HEADER, "user-7:session-4")
+                .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY));
+
+        // The body is the answer and nothing else: no framing to strip, so a client appends what
+        // arrives and is done.
+        assertThat(body).isEqualTo("I found 3 documents.");
+    }
+
+    @Test
+    void deliversWhitespaceAndNewlinesExactlyAsTheModelProducedThem() throws Exception {
+        // Why this endpoint is not an event stream. SSE has no escaping: SseEmitter writes
+        // "data:" followed by the delta verbatim, so a leading space landed where the SSE spec
+        // mandates a client strip one ("Yourfilms"), and an embedded newline was rewritten to
+        // "\ndata:", splitting one delta across frames. Plain text has neither hazard, and this
+        // test is what keeps the endpoint honest about it.
+        given(assistant.stream(anyString(), any(ChatRequest.class)))
+                .willReturn(Flux.just("Your", " films", " collection.\n\n", "- .45\n", "- 8 Mile"));
+
+        String body = streamBody(post("/api/v1/stream")
+                .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY));
+
+        assertThat(body).isEqualTo("""
+                Your films collection.
+
+                - .45
+                - 8 Mile""");
+    }
+
+    @Test
+    void streamsNonAsciiAnswersAsUtf8() throws Exception {
+        // The charset has to be pinned on the response. ReactiveTypeHandler stamps the media type
+        // it is given onto the Content-Type header, so a bare text/plain would advertise no
+        // charset and leave a client free to decode UTF-8 bytes as ISO-8859-1.
+        given(assistant.stream(anyString(), any(ChatRequest.class)))
+                .willReturn(Flux.just("¿Quién es el señor ", "López?"));
+
+        var response = mockMvc.perform(asyncDispatch(mockMvc.perform(post("/api/v1/stream")
+                .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY)).andReturn()))
+                .andReturn().getResponse();
+
+        assertThat(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                .isEqualTo("¿Quién es el señor López?");
+        assertThat(response.getContentType()).isEqualToIgnoringCase("text/plain;charset=UTF-8");
+    }
+
+    @Test
+    void refusesToServeTheStreamAsServerSentEvents() throws Exception {
+        // This endpoint used to be an event stream, and ReactiveTypeHandler would still serve one
+        // if asked: it picks its branch from the response's own Content-Type and falls back to
+        // Accept when that is absent. Declaring produces=text/plain settles it in content
+        // negotiation instead, so a client still asking for Server-Sent Events is refused outright
+        // rather than quietly served the framing this endpoint removed.
+        mockMvc.perform(post("/api/v1/stream")
+                        .accept(MediaType.TEXT_EVENT_STREAM)
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(jsonPath("$.detail").value("Acceptable representations: [text/plain]."));
+
+        then(assistant).should(never()).stream(anyString(), any(ChatRequest.class));
+    }
+
+    @Test
+    void echoesTheConversationHeaderBeforeTheStreamOpens() throws Exception {
+        // The header has to be on the response before the first frame flushes; a client cannot read
+        // trailers, so an id delivered late is an id never delivered.
+        given(assistant.stream(anyString(), any(ChatRequest.class))).willReturn(Flux.just("ok"));
+
+        mockMvc.perform(post("/api/v1/stream")
+                        .header(CONVERSATION_ID_HEADER, "user-7:session-4")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(header().string(CONVERSATION_ID_HEADER, "user-7:session-4"))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN));
+    }
+
+    @Test
+    void startsAFreshConversationWhenTheStreamCarriesNoHeader() throws Exception {
+        given(assistant.stream(anyString(), any(ChatRequest.class))).willReturn(Flux.just("Hello."));
+
+        String issued = mockMvc.perform(post("/api/v1/stream")
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andReturn().getResponse().getHeader(CONVERSATION_ID_HEADER);
+
+        assertThat(issued).isNotBlank().isNotEqualTo("default");
+        then(assistant).should().stream(eq(issued), any(ChatRequest.class));
+    }
+
+    @Test
+    void abortsTheResponseWhenTheUpstreamStreamFails() throws Exception {
+        // Once the response is committed the RFC 9457 mapping cannot apply — the status and headers
+        // are already sent — and a plain-text body has no vocabulary for an in-band failure. So the
+        // error is propagated and the response aborted: whatever was produced before it stands, and
+        // the missing terminating chunk is what tells a client the answer is incomplete.
+        given(assistant.stream(anyString(), any(ChatRequest.class)))
+                .willReturn(Flux.concat(Flux.just("I found "), Flux.error(
+                        new McpTransportException("stream closed while awaiting the tool result"))));
+
+        var started = mockMvc.perform(post("/api/v1/stream")
+                .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY)).andReturn();
+
+        // The advice declines a committed response, so the failure stays unresolved and surfaces
+        // as the aborted dispatch a container turns into a truncated body.
+        assertThatThrownBy(() -> mockMvc.perform(asyncDispatch(started)))
+                .rootCause().isInstanceOf(McpTransportException.class);
+
+        // What had already been written survives, and no problem detail was appended to it: a body
+        // of streamed text with JSON glued on the end would parse as neither.
+        assertThat(started.getResponse().getContentAsString())
+                .isEqualTo("I found ")
+                .doesNotContain("stream closed while awaiting the tool result")
+                .doesNotContain("The Solr assistant is temporarily unavailable. Please retry.");
+    }
+
+    @Test
+    void rejectsABlankMessageBeforeOpeningTheStream() throws Exception {
+        // Validation fails before the handler runs, so nothing is committed yet and this stays a
+        // normal RFC 9457 400 rather than a 200 whose first frame is an error.
+        mockMvc.perform(post("/api/v1/stream").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"message":""}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("message must not be blank"));
+
+        then(assistant).should(never()).stream(anyString(), any(ChatRequest.class));
+    }
+
+    @Test
     void forgetsAConversation() throws Exception {
         mockMvc.perform(delete("/api/v1/chat/{conversationId}", "user-7:session-4"))
                 .andExpect(status().isNoContent());
 
         then(assistant).should().forget("user-7:session-4");
+    }
+
+    /**
+     * Drives a streaming request to completion and returns the whole SSE body. MockMvc dispatches
+     * the reactive return value asynchronously, so without the second dispatch the recorded
+     * response holds only the headers.
+     */
+    private String streamBody(MockHttpServletRequestBuilder builder) throws Exception {
+        var started = mockMvc.perform(builder).andReturn();
+        return mockMvc.perform(asyncDispatch(started)).andReturn().getResponse().getContentAsString();
     }
 
     private static MockHttpServletRequestBuilder chat(String path) {

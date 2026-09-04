@@ -94,6 +94,19 @@ shared `config` or `service` package.
   manager Spring Security registers by default is request-bound and throws
   "servletRequest cannot be null" off a request thread, which includes MCP client initialization.
 - Configuration classes that need `HttpSecurity` must be `@ConditionalOnWebApplication(SERVLET)`.
+- **`ChatClient.stream()` never surfaces tool calls.** `ToolCallingAdvisor.adviseStream` aggregates
+  each round, drives the tool recursion, then ends with
+  `.filter(ccr -> !isToolCallResponse(ccr.chatResponse()))` — so a subscriber sees the final answer's
+  deltas and nothing of the negotiation. Anything that needs tool names or arguments must observe the
+  chain at a second point: a `StreamAdvisor` at order `0` (beside `SimpleLoggerAdvisor`, *inside* the
+  tool loop) sees each round's response before that filter. Do not try to sort tool calls out of the
+  stream; they are not in it.
+- **`ProblemDetailExceptionHandler` does not cover a committed stream.** On
+  `POST /api/v1/stream` the advice still maps everything raised before the first frame, but once
+  a frame flushes the status is `200` and a failure can only be reported in-band, as the terminal
+  `error` event the controller emits. Keep the wording identical to the advice's by referencing
+  `ProblemDetailExceptionHandler.FAILED_DETAIL` rather than repeating the string, and never put the
+  cause in the frame — the advice does not return it either.
 - API versions are declared with `@RequestMapping(version = ...)` (Spring Framework 7 built-in
   versioning), never as a literal path prefix. Adding a version means adding handlers, not paths.
 - `spring.mvc.apiversion.default` is set to `v1`, matching `SolrAssistantController.V1`; keep the
@@ -115,6 +128,12 @@ shared `config` or `service` package.
   `mcp-` prefix for transports. Activating `cli` alone drops the `mcp-stdio` default —
   `spring.profiles.default` is replaced by an explicit activation, never merged — so the CLI is
   always run as `cli,<mcp-profile>`.
+- The shell's commands are a `@CommandGroup(name = "Solr MCP Commands", prefix = "solr-mcp")`, so
+  `@Command(name = "chat")` registers as **`solr-mcp chat`** — `CommandFactoryBean` builds the name
+  as `prefix + " " + name`, and `CommandRegistry` matches that whole string. Keep new commands in
+  that group rather than adding top-level words, and name them in user-facing text (hints, README)
+  with the prefix. `@CommandGroup` is meta-annotated `@Component`, so it also makes the class a
+  bean — do not add a second stereotype.
 - Spring Shell has **no property that disables the shell** (`spring.shell.interactive.enabled=false`
   selects non-interactive mode instead). `ShellSuppressionConfiguration` overrides the
   auto-configured `springShellApplicationRunner` with a no-op under `@Profile("!cli")`; that back-off

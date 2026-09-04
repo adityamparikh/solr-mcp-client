@@ -116,11 +116,32 @@ class CliProfileWiringTest {
     }
 
     @Test
-    void registersTheAssistantCommands() {
+    void registersTheAssistantCommandsUnderTheGroupPrefix() {
+        // The commands answer to their prefixed names, not their bare ones: CommandFactoryBean
+        // builds the registered name as `@CommandGroup.prefix() + " " + @Command.name()`, and
+        // CommandRegistry matches that whole string. Asserting the bare `chat`/`stream`/`new`
+        // resolve to nothing is the half that fails if the group annotation is ever dropped —
+        // the commands would still register, just as three top-level words.
         CommandRegistry registry = context.getBean(CommandRegistry.class);
 
-        assertThat(registry.getCommandByName("solr-mcp")).isNotNull();
-        assertThat(registry.getCommandByName("new")).isNotNull();
+        assertThat(registry.getCommandByName("solr-mcp chat")).isNotNull();
+        assertThat(registry.getCommandByName("solr-mcp stream")).isNotNull();
+        assertThat(registry.getCommandByName("solr-mcp new")).isNotNull();
+        assertThat(registry.getCommandByName("chat")).isNull();
+        assertThat(registry.getCommandByName("stream")).isNull();
+        assertThat(registry.getCommandByName("new")).isNull();
+    }
+
+    @Test
+    void groupsTheAssistantCommandsUnderOneHelpHeading() {
+        // The group's name is not part of any command name — it is only the heading `help` lists
+        // the three under. Without it they would fall back to a heading derived from the class
+        // name ("Solr Assistant Commands"), which is an implementation detail leaking into
+        // operator-facing output.
+        CommandRegistry registry = context.getBean(CommandRegistry.class);
+
+        assertThat(requireNonNull(registry.getCommandByName("solr-mcp chat")).getGroup())
+                .isEqualTo("Solr MCP Commands");
     }
 
     @Test

@@ -42,6 +42,65 @@ authentication, so a fixed fallback would drop unrelated callers into one memory
 could read each other's turns. A conversation id is a routing key, not a secret — any caller that
 knows one can continue it.
 
+## `POST /api/v1/stream`
+
+The same turn as `/chat`, delivered as plain text while the model produces it. Identical request:
+same JSON body, same `X-AI-Conversation-Id` header in both directions.
+
+**Response** — `200 text/plain;charset=UTF-8`. The body is the answer and nothing else. Deltas are
+concatenated onto the response as the model produces them, so a client appends what it reads and is
+finished; there is no framing to strip and no parser to write.
+
+```bash
+curl -sN localhost:9090/api/v1/stream \
+  -H 'Content-Type: application/json' \
+  -H 'X-AI-Conversation-Id: user-7:session-4' \
+  -d '{"message":"How many documents are in the books collection?"}'
+```
+
+```js
+const res = await fetch('/api/v1/stream', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-AI-Conversation-Id': id },
+  body: JSON.stringify({ message }),
+});
+for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
+  answer += chunk;
+}
+```
+
+**This is deliberately not Server-Sent Events**, and a request that asks for them with
+`Accept: text/event-stream` is refused with a `406`. SSE has no escaping — a frame is `data:`
+followed by the payload as-is — so a delta beginning with a space landed exactly where the SSE
+specification directs a client to strip one, turning `"Your"`, `" films"` into `Yourfilms`; and a
+delta containing a newline was rewritten to `\ndata:`, splitting one delta across frames for any
+client not running a conformant parser. Escaping the payload would have fixed both, at the cost of
+making every consumer decode a frame to recover text it can otherwise use directly.
+
+**Only the final answer streams.** Spring AI runs the tool loop underneath this endpoint and filters
+the intermediate tool-call responses out before any subscriber sees them
+(`ToolCallingAdvisor.adviseStream` ends with a filter on `isToolCallResponse`). A question that makes
+the model read a schema and then query it is therefore silent for the whole negotiation and then
+streams the answer. Surfacing which tools ran would need a second observation point inside the
+advisor chain, not a change to this endpoint.
+
+**The error contract differs from every other endpoint here**, unavoidably.
+`ProblemDetailExceptionHandler` can only act while the response is uncommitted:
+
+- failures **before** the first delta — validation, an unsupported API version, anything the
+  assistant throws synchronously — are ordinary RFC 9457 problem details with their proper status;
+- failures **after** a delta has flushed abort the response. The status is already `200` and plain
+  text has no vocabulary for an in-band failure, so the answer produced so far stands and the body
+  ends without its terminating chunk. An HTTP client surfaces that as a transport error on an
+  incomplete body; the cause is written to the server log only. A human-readable marker was
+  rejected in its place because it would leave a program unable to tell a truncated answer from a
+  finished one.
+
+**A client that disconnects mid-stream may leave the conversation without its assistant turn.** The
+memory advisor writes that turn when the stream completes, so a cancelled subscription can retain
+the user's message alone. The blocking endpoint cannot have this; release such a conversation with
+`DELETE` rather than continuing it.
+
 ## `DELETE /api/v1/chat/{conversationId}`
 
 Returns `204 No Content`. Chat memory is Spring AI's in-process `MessageWindowChatMemory`: it is
