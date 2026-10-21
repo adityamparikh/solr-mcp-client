@@ -41,10 +41,6 @@ java {
     }
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     implementation(libs.jspecify)
     implementation(libs.spring.boot.actuator)
