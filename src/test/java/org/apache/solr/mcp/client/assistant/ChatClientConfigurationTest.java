@@ -22,21 +22,28 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.DefaultChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.ai.chat.client.advisor.api.MemoryAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.session.DefaultSessionService;
+import org.springframework.ai.session.InMemorySessionRepository;
+import org.springframework.ai.session.SessionService;
+import org.springframework.ai.session.advisor.SessionAdvisors;
+import org.springframework.ai.session.advisor.SessionMemoryAdvisor;
+import org.springframework.ai.session.advisor.SessionTurnAdvisor;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.function.FunctionToolCallback;
@@ -46,6 +53,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -61,12 +70,19 @@ import static org.mockito.Mockito.when;
  * before reading the chain back off the request spec the call mutated — a chain read off
  * {@code prompt()} would be missing the very advisor they are about.
  *
- * <p>The last test goes further and drives a real tool round-trip through that chain, which is what
- * proves the logging is worth having rather than merely correctly ordered.
+ * <p>The session advisors run against a real {@link SessionService} on an in-memory repository rather
+ * than a mock, so the tests see what the session actually stores and replays.
+ *
+ * <p>The last tests go further and drive a real tool round-trip through that chain, which is what
+ * proves the logging and the session storage are worth having rather than merely correctly ordered.
  */
 class ChatClientConfigurationTest {
 
     private final ChatClientConfiguration configuration = new ChatClientConfiguration();
+
+    private final SessionService sessionService = DefaultSessionService.builder()
+            .sessionRepository(InMemorySessionRepository.builder().build())
+            .build();
 
     /**
      * Stands in for the options a real provider's {@code ChatModel} contributes to every request.
@@ -93,20 +109,17 @@ class ChatClientConfigurationTest {
         when(chatModel.call(any(Prompt.class)))
                 .thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("ok")))));
 
-        ChatMemory chatMemory = mock(ChatMemory.class);
-        when(chatMemory.get(any())).thenReturn(List.of());
-
         ToolCallbackProvider toolCallbacks = mock(ToolCallbackProvider.class);
         when(toolCallbacks.getToolCallbacks()).thenReturn(new ToolCallback[0]);
 
         ChatClient chatClient =
-                configuration.chatClient(ChatClient.builder(chatModel), chatMemory, toolCallbacks);
+                configuration.chatClient(ChatClient.builder(chatModel), sessionService, toolCallbacks);
 
-        // The conversation id is supplied per request by SolrAssistant, never defaulted, so the
-        // memory advisor rejects the call without it.
+        // The session id is supplied per request by SolrAssistant, never defaulted, so the
+        // session advisors reject the call without it.
         var requestSpec = (DefaultChatClient.DefaultChatClientRequestSpec) chatClient.prompt()
                 .user("hello")
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, "test"));
+                .advisors(SessionAdvisors.session("test"));
         requestSpec.call().content();
 
         return requestSpec.getAdvisors();
@@ -140,25 +153,63 @@ class ChatClientConfigurationTest {
     }
 
     /**
-     * Chat memory must stay <em>outside</em> the tool loop. Spring AI derives the tool advisor's
-     * internal conversation history from exactly this comparison: a memory advisor ordered after the
-     * tool advisor turns that internal history off, and the tool loop then loses the assistant and
-     * tool messages it needs to accumulate across iterations.
+     * The session turn wraps the whole tool loop and the session memory runs inside it. Spring AI
+     * turns the tool advisor's internal conversation history off when a memory advisor is ordered
+     * after it, which is what the session design wants: each round of the loop is rebuilt from the
+     * session, which stores the tool calls and results as they happen. Moving the memory advisor
+     * outside would leave the session holding only the opening request and the final answer.
      */
     @Test
-    void keepsChatMemoryOutsideTheToolCallingLoop() {
+    void wrapsTheToolLoopInTheSessionTurnAndRunsSessionMemoryInsideIt() {
         List<Advisor> advisors = assembledAdvisors();
 
-        Advisor memory = advisors.stream()
-                .filter(MemoryAdvisor.class::isInstance)
+        Advisor turn = advisors.stream()
+                .filter(SessionTurnAdvisor.class::isInstance)
                 .findFirst()
                 .orElseThrow();
         Advisor toolCalling = advisors.stream()
                 .filter(ToolCallingAdvisor.class::isInstance)
                 .findFirst()
                 .orElseThrow();
+        Advisor memory = advisors.stream()
+                .filter(SessionMemoryAdvisor.class::isInstance)
+                .findFirst()
+                .orElseThrow();
 
-        assertThat(memory.getOrder()).isLessThan(toolCalling.getOrder());
+        assertThat(turn.getOrder()).isLessThan(toolCalling.getOrder());
+        assertThat(memory.getOrder()).isGreaterThan(toolCalling.getOrder());
+    }
+
+    /**
+     * What memory is for, asserted on the prompt the model receives: a second turn in the same
+     * session carries the first turn's question and answer, and a different session does not.
+     */
+    @Test
+    void replaysEarlierTurnsOfTheSameSessionOnly() {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.getOptions()).thenReturn(toolCapableOptions());
+        when(chatModel.call(any(Prompt.class))).thenReturn(
+                new ChatResponse(List.of(new Generation(new AssistantMessage("Noted: films.")))),
+                new ChatResponse(List.of(new Generation(new AssistantMessage("You said films.")))),
+                new ChatResponse(List.of(new Generation(new AssistantMessage("I don't know.")))));
+        ToolCallbackProvider toolCallbacks = mock(ToolCallbackProvider.class);
+        when(toolCallbacks.getToolCallbacks()).thenReturn(new ToolCallback[0]);
+        ChatClient chatClient =
+                configuration.chatClient(ChatClient.builder(chatModel), sessionService, toolCallbacks);
+
+        chatClient.prompt().user("My collection is called films.")
+                .advisors(SessionAdvisors.session("alice")).call().content();
+        chatClient.prompt().user("Which collection did I mention?")
+                .advisors(SessionAdvisors.session("alice")).call().content();
+        chatClient.prompt().user("Which collection did I mention?")
+                .advisors(SessionAdvisors.session("bob")).call().content();
+
+        ArgumentCaptor<Prompt> prompts = ArgumentCaptor.forClass(Prompt.class);
+        verify(chatModel, times(3)).call(prompts.capture());
+        assertThat(texts(prompts.getAllValues().get(1).getInstructions()))
+                .contains("My collection is called films.", "Noted: films.");
+        assertThat(texts(prompts.getAllValues().get(2).getInstructions()))
+                .doesNotContain("My collection is called films.", "Noted: films.");
     }
 
     /**
@@ -196,14 +247,11 @@ class ChatClientConfigurationTest {
                 new ChatResponse(List.of(new Generation(
                         new AssistantMessage("The films collection holds 42 documents.")))));
 
-        ChatMemory chatMemory = mock(ChatMemory.class);
-        when(chatMemory.get(any())).thenReturn(List.of());
-
         configuration
-                .chatClient(ChatClient.builder(chatModel), chatMemory, toolCallbacks)
+                .chatClient(ChatClient.builder(chatModel), sessionService, toolCallbacks)
                 .prompt()
                 .user("how many documents are in the films collection?")
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, "test"))
+                .advisors(SessionAdvisors.session("test"))
                 .call()
                 .content();
 
@@ -211,6 +259,17 @@ class ChatClientConfigurationTest {
         assertThat(logged.list).hasSize(4);
         assertThat(logged.list.get(1).getFormattedMessage()).contains("countDocuments");
         assertThat(logged.list.get(2).getFormattedMessage()).contains("42");
+
+        // The session memory runs inside the loop, so the whole negotiation is in the session, in
+        // order: the question, the tool call, its result and the answer.
+        assertThat(sessionService.getMessages("test"))
+                .extracting(Message::getMessageType)
+                .containsExactly(MessageType.USER, MessageType.ASSISTANT, MessageType.TOOL,
+                        MessageType.ASSISTANT);
+    }
+
+    private static List<String> texts(List<Message> messages) {
+        return messages.stream().map(Message::getText).toList();
     }
 
     /**

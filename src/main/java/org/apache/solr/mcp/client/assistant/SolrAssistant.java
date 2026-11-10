@@ -18,7 +18,8 @@ package org.apache.solr.mcp.client.assistant;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.session.SessionService;
+import org.springframework.ai.session.advisor.SessionAdvisors;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -29,7 +30,7 @@ import reactor.core.publisher.Flux;
  * {@code org.apache.solr.mcp.client.web} is one adapter over it, and the interactive shell in
  * {@code org.apache.solr.mcp.client.cli} is a second; an in-process UI layer (that shell, or a
  * future Vaadin/Hilla view) injects this bean directly rather than calling the application's own
- * HTTP endpoints. Keeping the chat client, memory scoping and MCP tools here means adding a UI
+ * HTTP endpoints. Keeping the chat client, session scoping and MCP tools here means adding a UI
  * duplicates none of that wiring.
  *
  * <p>{@link ChatRequest} and {@link ChatReply} are the assistant's own vocabulary rather than the
@@ -41,20 +42,21 @@ import reactor.core.publisher.Flux;
 public class SolrAssistant {
 
     private final ChatClient chatClient;
-    private final ChatMemory chatMemory;
+    private final SessionService sessionService;
 
     /**
      * Both collaborators are singletons shared by every conversation; the conversation id passed to
      * {@link #send} is what keeps their state separate.
      *
-     * @param chatClient the assistant's own client, already carrying the system prompt, memory
-     *                   advisor and Solr MCP tools
-     * @param chatMemory the same store the advisor writes through, injected so conversations can
-     *                   also be released; the advisor alone offers no way to evict one
+     * @param chatClient     the assistant's own client, already carrying the system prompt,
+     *                       session advisors and Solr MCP tools
+     * @param sessionService the same service the session advisors write through, injected so
+     *                       conversations can also be released; the advisors alone offer no way to
+     *                       delete one
      */
-    public SolrAssistant(ChatClient chatClient, ChatMemory chatMemory) {
+    public SolrAssistant(ChatClient chatClient, SessionService sessionService) {
         this.chatClient = chatClient;
-        this.chatMemory = chatMemory;
+        this.sessionService = sessionService;
     }
 
     /**
@@ -64,8 +66,8 @@ public class SolrAssistant {
      * <p>Blocks for the whole exchange, tool round-trips included, so a single call may take far
      * longer than one model request. {@link #stream} is the same exchange delivered incrementally.
      *
-     * @param conversationId scopes the retained turns; an id never seen before starts a new
-     *                       conversation rather than failing
+     * @param conversationId the session the turn runs on; an id never seen before starts a new
+     *                       session rather than failing
      * @return the model's answer, with any tool calls already resolved
      * @throws EmptyAnswerException if the model completed without producing any content, which
      *                              {@code ChatClient} reports as a null body
@@ -73,7 +75,7 @@ public class SolrAssistant {
     public ChatReply send(String conversationId, ChatRequest request) {
         String answer = chatClient.prompt()
                 .user(request.message())
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .advisors(SessionAdvisors.session(conversationId))
                 .call()
                 .content();
 
@@ -113,7 +115,7 @@ public class SolrAssistant {
     public Flux<String> stream(String conversationId, ChatRequest request) {
         return chatClient.prompt()
                 .user(request.message())
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .advisors(SessionAdvisors.session(conversationId))
                 .stream()
                 .content()
                 .switchIfEmpty(Flux.error(() -> new EmptyAnswerException(
@@ -121,14 +123,14 @@ public class SolrAssistant {
     }
 
     /**
-     * Drops the retained turns for a conversation. Chat memory is held in process and never evicted
-     * on its own, so callers must release conversations they are finished with.
+     * Deletes a conversation's session and its history. Sessions are held in process and nothing
+     * evicts them on its own, so callers must release conversations they are finished with.
      *
      * @param conversationId the conversation to release; unknown ids are silently accepted, so a
      *                       caller need not track whether a conversation was ever started
      */
     public void forget(String conversationId) {
-        chatMemory.clear(conversationId);
+        sessionService.delete(conversationId);
     }
 
     /**

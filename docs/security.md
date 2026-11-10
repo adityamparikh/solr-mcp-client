@@ -19,7 +19,7 @@ clients are not told about protection that does not exist.
 
 Because there is no inbound authentication, two other decisions follow from it and should not be
 "tidied up" independently: there is no shared default conversation id (it would merge unrelated
-callers' chat memory), and CORS is off until origins are named explicitly.
+callers' sessions), and CORS is off until origins are named explicitly.
 
 ## OAuth2 secures the *outbound* connection only
 
