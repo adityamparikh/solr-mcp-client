@@ -2,7 +2,7 @@
 
 ## Project
 
-`solr-mcp-client` is a Java 25 Spring Boot 4.1.1 REST façade over Apache Solr MCP, using Spring AI
+`solr-mcp-client` is a Java 25 Spring Boot 4.2.0-RC2 REST façade over Apache Solr MCP, using Spring AI
 2.1.0-RC2 and MCP Java SDK 2.0.0. The base package is `org.apache.solr.mcp.client`.
 
 ## Commands

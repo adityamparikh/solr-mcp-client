@@ -33,7 +33,7 @@ REST service on the same port in every profile.
 | | |
 | --- | --- |
 | Java toolchain | 25 |
-| Spring Boot | 4.1.1 |
+| Spring Boot | 4.2.0-RC2 |
 | Spring AI | 2.0.1 |
 | springdoc-openapi | 3.1.0 |
 | Build | Gradle (Kotlin DSL) + version catalog |
