@@ -2,8 +2,8 @@
 
 ## Project
 
-`solr-mcp-client` is a Java 25 Spring Boot 4.1.1 REST façade over Apache Solr MCP, using Spring AI
-2.0.1 and MCP Java SDK 2.0.0. The base package is `org.apache.solr.mcp.client`.
+`solr-mcp-client` is a Java 25 Spring Boot 4.2.0-RC2 REST façade over Apache Solr MCP, using Spring AI
+2.1.0-RC2 and MCP Java SDK 2.0.0. The base package is `org.apache.solr.mcp.client`.
 
 ## Commands
 
@@ -75,15 +75,19 @@ shared `config` or `service` package.
   `prompt()` does not contain it yet, which is why `ChatClientConfigurationTest` drives a real call
   against a stub model before asserting. Recipes written against the `2.0.0-M` milestones still
   spell it `ToolCallAdvisor` and set `advisorOrder(HIGHEST_PRECEDENCE + 300)` plus
-  `disableInternalConversationHistory()` by hand; on 2.0.1 the first is a shim subclass and the
+  `disableInternalConversationHistory()` by hand; from 2.0.1 on the first is a shim subclass and the
   other two are the defaults.
 - Advisor order in `ChatClientConfiguration` is load-bearing in two directions, and both break
-  silently. Chat memory must stay **outside** the tool loop (`MIN_VALUE + 200` < `MIN_VALUE + 300`):
-  `autoRegisterToolCallingAdvisor()` reads exactly that comparison and turns the tool advisor's
-  internal conversation history *off* when a `MemoryAdvisor` is ordered after it, costing the loop
-  the messages it accumulates across iterations. `SimpleLoggerAdvisor` must stay **inside** it
-  (order `0`): that is what makes tool-negotiation traffic visible instead of just the opening
-  request and final answer. `ChatClientConfigurationTest` guards both.
+  silently. Memory is session-based (Spring AI 2.1 `SessionAdvisors`, which replaced the deprecated
+  `ChatMemory` API): `SessionTurnAdvisor` must stay **outside** the tool loop (`MIN_VALUE + 200` <
+  `MIN_VALUE + 300`) and `SessionMemoryAdvisor` **inside** it (`MIN_VALUE + 1000`).
+  `autoRegisterToolCallingAdvisor()` turns the tool advisor's internal conversation history *off*
+  when a `MemoryAdvisor` is ordered after it, and the session design wants exactly that: each round
+  is rebuilt from the session, which stores tool calls and results as they happen.
+  `SimpleLoggerAdvisor` must stay **inside** the loop (order `0`): that is what makes
+  tool-negotiation traffic visible instead of just the opening request and final answer.
+  `ChatClientConfigurationTest` guards all three. Every request must carry
+  `SessionAdvisors.session(id)`; the session advisors throw `IllegalStateException` without one.
 - `SimpleLoggerAdvisor` is registered unconditionally and gated by its log level alone — it
   self-guards on `isDebugEnabled()`. The switch is
   `logging.level.org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor=DEBUG` (DEBUG, not
@@ -178,7 +182,7 @@ shared `config` or `service` package.
   do not advertise a security scheme in OpenAPI that is not enforced.
 - Conversation id travels in the `X-AI-Conversation-Id` header in both directions and is not
   duplicated in the response body. Never introduce a shared default id — without inbound auth it
-  merges unrelated callers' chat memory. `ApiCorsConfiguration` puts the header in
+  merges unrelated callers' sessions. `ApiCorsConfiguration` puts the header in
   `Access-Control-Expose-Headers`; a browser cannot read it cross-origin otherwise and continuity
   breaks with no error. If the header is ever renamed, rename it there too.
 - CORS origins come from `solr.mcp.client.cors.allowed-origins` and default to none. Never register

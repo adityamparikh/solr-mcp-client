@@ -97,16 +97,16 @@ advisor chain, not a change to this endpoint.
   finished one.
 
 **A client that disconnects mid-stream may leave the conversation without its assistant turn.** The
-memory advisor writes that turn when the stream completes, so a cancelled subscription can retain
+session memory advisor writes that turn when the stream completes, so a cancelled subscription can retain
 the user's message alone. The blocking endpoint cannot have this; release such a conversation with
 `DELETE` rather than continuing it.
 
 ## `DELETE /api/v1/chat/{conversationId}`
 
-Returns `204 No Content`. Chat memory is Spring AI's in-process `MessageWindowChatMemory`: it is
-lost on restart and is never evicted on its own, so long-lived deployments should release
-conversations when a session ends. For durable history, add
-`spring-ai-starter-model-chat-memory-repository-jdbc`.
+Returns `204 No Content`. Conversations are Spring AI sessions kept in an in-process
+`InMemorySessionRepository`: they are lost on restart and are never evicted on their own, so
+long-lived deployments should release conversations when they end. For durable history, add
+`spring-ai-starter-model-session-jdbc` and remove the in-memory `SessionRepository` bean.
 
 ## Errors
 

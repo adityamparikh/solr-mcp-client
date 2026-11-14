@@ -18,7 +18,8 @@ package org.apache.solr.mcp.client.assistant;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.session.SessionService;
+import org.springframework.ai.session.advisor.SessionMemoryAdvisor;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -35,8 +36,8 @@ import static org.mockito.Mockito.when;
 class SolrAssistantTest {
 
     private final ChatClient chatClient = mock(ChatClient.class);
-    private final ChatMemory chatMemory = mock(ChatMemory.class);
-    private final SolrAssistant assistant = new SolrAssistant(chatClient, chatMemory);
+    private final SessionService sessionService = mock(SessionService.class);
+    private final SolrAssistant assistant = new SolrAssistant(chatClient, sessionService);
 
     @Test
     void scopesThePromptToTheGivenConversation() {
@@ -57,7 +58,7 @@ class SolrAssistantTest {
                 new SolrAssistant.ChatRequest("Find documents about SolrCloud"));
 
         assertThat(reply.content()).isEqualTo("I found 3 documents.");
-        verify(advisorSpec).param(ChatMemory.CONVERSATION_ID, "user-7:session-4");
+        verify(advisorSpec).param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, "user-7:session-4");
     }
 
     @Test
@@ -81,10 +82,10 @@ class SolrAssistantTest {
     }
 
     @Test
-    void clearsTheConversationFromChatMemory() {
+    void deletesTheConversationsSession() {
         assistant.forget("user-7:session-4");
 
-        verify(chatMemory).clear("user-7:session-4");
+        verify(sessionService).delete("user-7:session-4");
     }
 
     @Test
@@ -108,7 +109,7 @@ class SolrAssistantTest {
         // Order is the whole point of a stream: the deltas must arrive as the model produced them,
         // not merely add up to the right answer.
         assertThat(deltas).containsExactly("I found ", "3 ", "documents.");
-        verify(advisorSpec).param(ChatMemory.CONVERSATION_ID, "user-7:session-4");
+        verify(advisorSpec).param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, "user-7:session-4");
     }
 
     @Test

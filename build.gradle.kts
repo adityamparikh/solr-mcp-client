@@ -56,6 +56,8 @@ dependencies {
     implementation(libs.spring.ai.mcp.client)
     implementation(libs.mcp.client.security)
     implementation(libs.spring.ai.openai)
+    implementation(libs.spring.ai.session.advisor)
+    implementation(libs.spring.ai.session.autoconfigure)
   //  implementation(libs.spring.ai.anthropic)
     implementation(libs.spring.shell.starter.ffm)
 

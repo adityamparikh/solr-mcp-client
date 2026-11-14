@@ -17,9 +17,14 @@
 package org.apache.solr.mcp.client.assistant;
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.session.EventFilter;
+import org.springframework.ai.session.InMemorySessionRepository;
+import org.springframework.ai.session.SessionRepository;
+import org.springframework.ai.session.SessionService;
+import org.springframework.ai.session.advisor.SessionAdvisors;
+import org.springframework.ai.session.advisor.SessionMemoryAdvisor;
+import org.springframework.ai.session.advisor.SessionTurnAdvisor;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -53,14 +58,20 @@ import org.springframework.context.annotation.Configuration;
  *
  * <h2>The advisor chain</h2>
  *
- * <p>Two advisors are declared here; a third arrives on its own. Ordered outermost first, as they
- * run:
+ * <p>Three advisors are declared here; a fourth arrives on its own. Ordered outermost first, as
+ * they run:
  *
  * <ol>
- *   <li>{@link MessageChatMemoryAdvisor} — order {@code MIN_VALUE + 200}
+ *   <li>{@link SessionTurnAdvisor} — order {@code MIN_VALUE + 200}
  *   <li>{@code ToolCallingAdvisor} — order {@code MIN_VALUE + 300}, <em>not declared here</em>
+ *   <li>{@link SessionMemoryAdvisor} — order {@code MIN_VALUE + 1000}
  *   <li>{@link SimpleLoggerAdvisor} — order {@code 0}
  * </ol>
+ *
+ * <p>The two session advisors come as a pair from {@link SessionAdvisors}, which replaced the
+ * deprecated {@code ChatMemory} API in Spring AI 2.1. They split what the old
+ * {@code MessageChatMemoryAdvisor} did alone: the turn advisor opens the session and owns the whole
+ * exchange, and the memory advisor reads and writes the history once per model call.
  *
  * <p>{@code ToolCallingAdvisor} is deliberately absent from the code below. Spring AI 2.0 moved tool
  * calling out of {@code ChatClient}'s internals and into the advisor chain, and
@@ -70,14 +81,16 @@ import org.springframework.context.annotation.Configuration;
  * registration happens on {@code call()}/{@code stream()}, not on {@code prompt()}: a chain read off
  * {@code prompt()} does not yet contain it.
  *
- * <p>The two order relationships are load-bearing, and both fail silently rather than loudly:
+ * <p>The order relationships are load-bearing, and all fail silently rather than loudly:
  *
  * <ul>
- *   <li><b>Memory outside the tool loop.</b> {@code autoRegisterToolCallingAdvisor()} derives the
- *       tool advisor's internal conversation history from this comparison alone — a
- *       {@code MemoryAdvisor} ordered <em>after</em> the tool advisor switches that history off. The
- *       tool loop needs it on to accumulate assistant and tool messages across iterations, and the
- *       default orders above already arrange that. Do not reorder the memory advisor.
+ *   <li><b>Turn outside the tool loop, memory inside it.</b> {@code autoRegisterToolCallingAdvisor()}
+ *       switches the tool advisor's internal conversation history off when a {@code MemoryAdvisor}
+ *       is ordered <em>after</em> it, and the session design depends on exactly that: each round of
+ *       the loop is rebuilt from the session, which stores the tool calls and their results as they
+ *       happen. With the memory advisor moved outside, the loop would keep its own history as well
+ *       and the session would see only the opening request and the final answer. Keep the default
+ *       orders {@link SessionAdvisors} assigns.
  *   <li><b>Logger inside the tool loop.</b> {@link SimpleLoggerAdvisor} logs what passes through it,
  *       so sitting inside the tool advisor's recursion is what makes tool negotiation visible: the
  *       initial request, the model's tool-call request, the follow-up carrying tool results, and the
@@ -86,7 +99,8 @@ import org.springframework.context.annotation.Configuration;
  * </ul>
  *
  * <p>No advisor here sets a Reactor scheduler, which leaves each on {@code BaseAdvisor}'s
- * {@code boundedElastic} default — the form the Spring AI reference documents. That default is a
+ * {@code boundedElastic} default — the form the Spring AI reference documents, and the one
+ * {@link SessionAdvisors} uses for both session advisors when given no scheduler of its own. That default is a
  * static that a GraalVM native image bakes in as null
  * (<a href="https://github.com/spring-projects/spring-ai/issues/4714">spring-ai#4714</a>), failing
  * every advisor's constructor assertion at run time on the native image only. The fix is at the
@@ -111,20 +125,39 @@ class ChatClientConfiguration {
             """;
 
     /**
-     * The assistant's client: system prompt, memory advisor and Solr MCP tools attached as
+     * How many of a session's newest events are replayed into each prompt. Matches the 20-message
+     * window of the {@code MessageWindowChatMemory} this replaces; {@link EventFilter#lastN} extends
+     * it back to the start of a turn, so a tool call is never replayed without its result.
+     */
+    static final int HISTORY_WINDOW = 20;
+
+    /**
+     * Where conversations are kept: in process, lost on restart, exactly as the in-memory chat
+     * memory before it. Spring AI's session auto-configuration builds the {@link SessionService}
+     * on this bean. Swap in {@code spring-ai-starter-model-session-jdbc} (and drop this method) for
+     * history that survives a restart.
+     */
+    @Bean
+    SessionRepository sessionRepository() {
+        return InMemorySessionRepository.builder().build();
+    }
+
+    /**
+     * The assistant's client: system prompt, session advisors and Solr MCP tools attached as
      * defaults so every prompt built from it carries them. The class Javadoc explains why the
      * injected builder is mutated directly and why no tool-calling advisor appears here.
      */
     @Bean
     ChatClient chatClient(
             ChatClient.Builder chatClientBuilder,
-            ChatMemory chatMemory,
+            SessionService sessionService,
             ToolCallbackProvider mcpToolCallbacks) {
         return chatClientBuilder
                 .defaultSystem(SYSTEM_PROMPT)
-                .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        SimpleLoggerAdvisor.builder().build())
+                .defaultAdvisors(SessionAdvisors.builder(sessionService)
+                        .memory(memory -> memory.eventFilter(EventFilter.lastN(HISTORY_WINDOW)))
+                        .build())
+                .defaultAdvisors(SimpleLoggerAdvisor.builder().build())
                 .defaultTools(mcpToolCallbacks)
                 .build();
     }
