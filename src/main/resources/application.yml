@@ -65,6 +65,18 @@ spring:
     # If a second starter is ever added, spring.ai.model.chat must name the winner or startup fails
     # rather than guessing. Web slice tests pin it to `none` so they do not depend on which keys a
     # developer has exported.
+    # The client only chats, but the OpenAI starter also builds speech, transcription, embedding,
+    # image, moderation and decision models. On Spring AI 2.1.0-RC2 they are built at startup and
+    # need an API key, so a context with no OPENAI_API_KEY (every test) failed on the speech model,
+    # which nothing uses. `none` leaves each of them out; the chat model is untouched.
+    model:
+      audio:
+        speech: none
+        transcription: none
+      embedding: none
+      image: none
+      moderation: none
+      decision: none
     openai:
       chat:
         model: ${OPENAI_MODEL:gpt-5-mini}
