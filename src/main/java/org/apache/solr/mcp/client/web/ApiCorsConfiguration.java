@@ -19,8 +19,10 @@ package org.apache.solr.mcp.client.web;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.util.StringUtils;
+import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.Set;
@@ -43,6 +45,13 @@ import java.util.Set;
 @Configuration(proxyBeanMethods = false)
 class ApiCorsConfiguration implements WebMvcConfigurer {
 
+    private static final String API_PATH_PATTERN = "/api/**";
+
+    private static final String[] ALLOWED_METHODS = {
+            HttpMethod.GET.name(), HttpMethod.POST.name(), HttpMethod.DELETE.name()};
+
+    private static final String ANY_HEADER = CorsConfiguration.ALL;
+
     private final Set<String> allowedOrigins;
 
     /**
@@ -64,10 +73,10 @@ class ApiCorsConfiguration implements WebMvcConfigurer {
         if (allowedOrigins.isEmpty()) {
             return;
         }
-        registry.addMapping("/api/**")
+        registry.addMapping(API_PATH_PATTERN)
                 .allowedOrigins(allowedOrigins.toArray(String[]::new))
-                .allowedMethods("GET", "POST", "DELETE")
-                .allowedHeaders("*")
+                .allowedMethods(ALLOWED_METHODS)
+                .allowedHeaders(ANY_HEADER)
                 .exposedHeaders(SolrAssistantController.CONVERSATION_ID_HEADER);
     }
 }

@@ -134,16 +134,22 @@ class McpHttpOAuth2Configuration {
     @Bean
     McpClientCustomizer<McpClient.SyncSpec> solrMcpTransportContextCustomizer(Tracer tracer) {
         Supplier<McpTransportContext> authentication = new AuthenticationMcpTransportContextProvider();
-        return (name, spec) -> spec.transportContextProvider(() -> {
-            McpTransportContext base = authentication.get();
-            Span span = tracer.currentSpan();
-            if (span == null) {
-                return base;
-            }
-            TraceContext traceContext = span.context();
-            return key -> TracePropagatingHttpRequestCustomizer.TRACE_CONTEXT_KEY.equals(key)
-                    ? traceContext
-                    : base.get(key);
-        });
+        return (name, spec) -> spec.transportContextProvider(
+                () -> withCurrentTraceContext(authentication.get(), tracer));
+    }
+
+    /**
+     * Adds the caller's trace context to the authentication context, so the request customizer can
+     * still find it once the transport has moved the request off the calling thread.
+     */
+    private static McpTransportContext withCurrentTraceContext(McpTransportContext base, Tracer tracer) {
+        Span span = tracer.currentSpan();
+        if (span == null) {
+            return base;
+        }
+        TraceContext traceContext = span.context();
+        return key -> TracePropagatingHttpRequestCustomizer.TRACE_CONTEXT_KEY.equals(key)
+                ? traceContext
+                : base.get(key);
     }
 }
