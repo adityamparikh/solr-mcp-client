@@ -23,6 +23,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -49,9 +50,13 @@ class ApiCorsConfiguration implements WebMvcConfigurer {
      * Splits explicitly rather than binding straight to a collection: {@code @Value} collection
      * conversion depends on Boot's {@code ApplicationConversionService} being present, so it
      * silently yields a single element in contexts that lack it.
+     *
+     * <p>Each entry is trimmed and blank entries are dropped. Spring compares a configured origin
+     * with the request's {@code Origin} header verbatim, so the space in {@code "a, b"} would
+     * otherwise leave {@code " b"} unmatchable and that UI refused with a 403.
      */
     ApiCorsConfiguration(@Value("${solr.mcp.client.cors.allowed-origins:}") String allowedOrigins) {
-        this.allowedOrigins = StringUtils.commaDelimitedListToSet(allowedOrigins);
+        this.allowedOrigins = Set.copyOf(List.of(StringUtils.tokenizeToStringArray(allowedOrigins, ",")));
     }
 
     /**

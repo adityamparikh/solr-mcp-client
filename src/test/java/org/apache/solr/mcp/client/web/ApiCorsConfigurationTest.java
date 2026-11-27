@@ -98,6 +98,46 @@ class ApiCorsConfigurationTest {
     }
 
     @Nested
+    @WebMvcTest(controllers = SolrAssistantController.class,
+            properties = {"spring.ai.model.chat=none",
+                    "solr.mcp.client.cors.allowed-origins=" + UI_ORIGIN + ", https://admin.example.com,"})
+    class WhenTheOriginListIsWrittenLoosely {
+
+        @Autowired MockMvc mockMvc;
+        @MockitoBean SolrAssistant assistant;
+
+        @Test
+        void admitsAnOriginThatFollowsACommaAndSpace() throws Exception {
+            given(assistant.send(anyString(), any(ChatRequest.class))).willReturn(new ChatReply("ok"));
+
+            // Spring compares origins verbatim, so an untrimmed " https://admin.example.com" would
+            // never match the browser's Origin header and that UI would be refused with a 403.
+            mockMvc.perform(post("/api/v1/chat").header(HttpHeaders.ORIGIN, "https://admin.example.com")
+                            .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                            "https://admin.example.com"));
+        }
+    }
+
+    @Nested
+    @WebMvcTest(controllers = SolrAssistantController.class,
+            properties = {"spring.ai.model.chat=none", "solr.mcp.client.cors.allowed-origins= , "})
+    class WhenTheOriginListIsBlank {
+
+        @Autowired MockMvc mockMvc;
+        @MockitoBean SolrAssistant assistant;
+
+        @Test
+        void allowsNoCrossOriginAccessAtAll() throws Exception {
+            // Blank entries are not origins; a list of nothing but separators is the same as unset.
+            mockMvc.perform(post("/api/v1/chat").header(HttpHeaders.ORIGIN, UI_ORIGIN)
+                            .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                    .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+        }
+    }
+
+    @Nested
     @WebMvcTest(controllers = SolrAssistantController.class, properties = "spring.ai.model.chat=none")
     class WhenNoOriginIsConfigured {
 
