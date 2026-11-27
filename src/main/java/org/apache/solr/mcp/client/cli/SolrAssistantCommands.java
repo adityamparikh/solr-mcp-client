@@ -62,6 +62,10 @@ import java.util.UUID;
 @CommandGroup(name = "Solr MCP Commands", prefix = "solr-mcp")
 class SolrAssistantCommands {
 
+    private static final String EXAMPLE_QUESTION = "\"which collections exist\"";
+
+    private static final String NEW_CONVERSATION_LINE = "Started a new conversation.";
+
     private static final String EMPTY_ANSWER_LINE =
             "The model returned no content. Try rephrasing, or `solr-mcp new` to start a fresh conversation.";
 
@@ -112,7 +116,7 @@ class SolrAssistantCommands {
     @Command(name = "chat", description = "Chat with the Solr assistant; the conversation continues across asks")
     public String chat(@Arguments String input) {
         if (input.isBlank()) {
-            return "Nothing to ask. Try: solr-mcp chat \"which collections exist\"";
+            return usageHint("chat");
         }
         try {
             return assistant.send(conversationId, new ChatRequest(input)).content();
@@ -148,7 +152,7 @@ class SolrAssistantCommands {
     public void stream(@Arguments String input) {
         PrintWriter out = terminal.writer();
         if (input.isBlank()) {
-            out.println("Nothing to ask. Try: solr-mcp stream \"which collections exist\"");
+            out.println(usageHint("stream"));
             terminal.flush();
             return;
         }
@@ -165,14 +169,26 @@ class SolrAssistantCommands {
                     .blockLast();
             out.println();
         } catch (EmptyAnswerException e) {
-            out.println();
-            out.println(EMPTY_ANSWER_LINE);
+            printBeneathAnswer(out, EMPTY_ANSWER_LINE);
         } catch (RestClientException | McpError | McpTransportException | ToolExecutionException
                  | ToolCallLimitExceededException | OAuth2AuthorizationException e) {
-            out.println();
-            out.println(upstreamFailureLine(e));
+            printBeneathAnswer(out, upstreamFailureLine(e));
         }
         terminal.flush();
+    }
+
+    /** The reply to a blank question, naming the command so the example can be pasted as is. */
+    private static String usageHint(String command) {
+        return "Nothing to ask. Try: solr-mcp " + command + " " + EXAMPLE_QUESTION;
+    }
+
+    /**
+     * Ends whatever part of the answer already streamed with a line break, so a failure is
+     * reported on a line of its own rather than run onto the model's last words.
+     */
+    private static void printBeneathAnswer(PrintWriter out, String line) {
+        out.println();
+        out.println(line);
     }
 
     /**
@@ -202,6 +218,6 @@ class SolrAssistantCommands {
     public String startNewConversation() {
         assistant.forget(conversationId);
         conversationId = UUID.randomUUID().toString();
-        return "Started a new conversation.";
+        return NEW_CONVERSATION_LINE;
     }
 }
