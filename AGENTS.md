@@ -173,7 +173,9 @@ shared `config` or `service` package.
 - Never bind a comma-separated property straight to a `List`/`Set` with `@Value`. That conversion
   needs Boot's `ApplicationConversionService`, so it silently yields one element in contexts that
   lack it (a bare `ApplicationContextRunner`, for one). Bind a `String` and split it with
-  `StringUtils.commaDelimitedListToSet`.
+  `StringUtils.tokenizeToStringArray(value, ",")`, which trims each entry and drops blank ones.
+  `commaDelimitedListToSet` does neither, so `"a, b"` yields `" b"` — for CORS origins, which
+  Spring compares verbatim, that is an origin no browser can ever match.
 - The REST façade performs **no inbound authentication** by design. Do not add one without asking;
   do not advertise a security scheme in OpenAPI that is not enforced.
 - Conversation id travels in the `X-AI-Conversation-Id` header in both directions and is not

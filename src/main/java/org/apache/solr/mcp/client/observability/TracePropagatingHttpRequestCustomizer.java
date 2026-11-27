@@ -49,7 +49,7 @@ import org.jspecify.annotations.Nullable;
  * observation — the request is left untouched and the server starts its own trace, which is
  * exactly the behaviour before this class existed.
  */
-public class TracePropagatingHttpRequestCustomizer implements McpSyncHttpClientRequestCustomizer {
+public final class TracePropagatingHttpRequestCustomizer implements McpSyncHttpClientRequestCustomizer {
 
     /**
      * Key under which the capture side stores the caller's {@link TraceContext} in the
