@@ -158,7 +158,7 @@ public class SolrAssistant {
      * there would also capture Spring's own {@code IllegalStateException} for an unparseable API
      * version — a client error that must not be reported as an upstream one.
      */
-    public static class EmptyAnswerException extends IllegalStateException {
+    public static final class EmptyAnswerException extends IllegalStateException {
 
         /**
          * @param message names the conversation for the server-side log; the REST facade never
