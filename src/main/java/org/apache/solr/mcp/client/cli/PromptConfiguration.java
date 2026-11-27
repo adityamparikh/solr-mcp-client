@@ -36,8 +36,10 @@ import org.springframework.shell.jline.PromptProvider;
 @Profile("cli")
 class PromptConfiguration {
 
+    private static final String PROMPT = "$ ";
+
     @Bean
     PromptProvider promptProvider() {
-        return () -> new AttributedString("$ ");
+        return () -> new AttributedString(PROMPT);
     }
 }

@@ -71,18 +71,13 @@ public class SolrAssistant {
      *                              {@code ChatClient} reports as a null body
      */
     public ChatReply send(String conversationId, ChatRequest request) {
-        String answer = chatClient.prompt()
-                .user(request.message())
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
-                .call()
-                .content();
+        String answer = promptFor(conversationId, request).call().content();
 
         // ChatClient declares content() @Nullable. Returning it unchecked would make this method's
         // own non-null contract a lie under @NullMarked, and the null would surface to a caller as
         // an answer of {"content": null} rather than as the upstream failure it is.
         if (answer == null) {
-            throw new EmptyAnswerException(
-                    "The chat model returned no content for conversation " + conversationId);
+            throw EmptyAnswerException.forConversation(conversationId);
         }
         return new ChatReply(answer);
     }
@@ -111,13 +106,20 @@ public class SolrAssistant {
      * path's spelling of the null content {@link #send} rejects
      */
     public Flux<String> stream(String conversationId, ChatRequest request) {
-        return chatClient.prompt()
-                .user(request.message())
-                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId))
+        return promptFor(conversationId, request)
                 .stream()
                 .content()
-                .switchIfEmpty(Flux.error(() -> new EmptyAnswerException(
-                        "The chat model returned no content for conversation " + conversationId)));
+                .switchIfEmpty(Flux.error(() -> EmptyAnswerException.forConversation(conversationId)));
+    }
+
+    /**
+     * The request both {@link #send} and {@link #stream} issue: the user's turn, scoped to its
+     * conversation so the memory advisor reads and writes the right retained turns.
+     */
+    private ChatClient.ChatClientRequestSpec promptFor(String conversationId, ChatRequest request) {
+        return chatClient.prompt()
+                .user(request.message())
+                .advisors(advisors -> advisors.param(ChatMemory.CONVERSATION_ID, conversationId));
     }
 
     /**
@@ -166,6 +168,12 @@ public class SolrAssistant {
          */
         public EmptyAnswerException(String message) {
             super(message);
+        }
+
+        /** The one condition this exception reports, worded for the server-side log. */
+        static EmptyAnswerException forConversation(String conversationId) {
+            return new EmptyAnswerException(
+                    "The chat model returned no content for conversation " + conversationId);
         }
     }
 }

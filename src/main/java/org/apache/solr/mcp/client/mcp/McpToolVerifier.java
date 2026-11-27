@@ -26,6 +26,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -64,6 +65,12 @@ public class McpToolVerifier {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolVerifier.class);
 
+    private static final String NO_TOOLS_MESSAGE = """
+            The Solr MCP server offers no tools, so the assistant has nothing to call. \
+            Either no MCP connection is configured — activate the 'mcp-stdio' profile (the \
+            default), 'mcp-stdio-docker' or 'mcp-http' — or the connected process is not \
+            the Apache Solr MCP server.""";
+
     private final ObjectProvider<ToolCallbackProvider> toolCallbacks;
 
     /**
@@ -85,13 +92,8 @@ public class McpToolVerifier {
     void verifyToolsAvailable() {
         SortedSet<String> available = availableToolNames();
         if (available.isEmpty()) {
-            throw new IllegalStateException("""
-                    The Solr MCP server offers no tools, so the assistant has nothing to call. \
-                    Either no MCP connection is configured — activate the 'mcp-stdio' profile (the \
-                    default), 'mcp-stdio-docker' or 'mcp-http' — or the connected process is not \
-                    the Apache Solr MCP server.""");
+            throw new IllegalStateException(NO_TOOLS_MESSAGE);
         }
-
         log.info("Solr MCP server exposes {} tools: {}", available.size(), available);
     }
 
@@ -101,11 +103,9 @@ public class McpToolVerifier {
      * conditions warrant the same diagnosis.
      */
     private SortedSet<String> availableToolNames() {
-        ToolCallbackProvider provider = toolCallbacks.getIfAvailable();
-        if (provider == null) {
-            return new TreeSet<>();
-        }
-        return Arrays.stream(provider.getToolCallbacks())
+        return Optional.ofNullable(toolCallbacks.getIfAvailable())
+                .stream()
+                .flatMap(provider -> Arrays.stream(provider.getToolCallbacks()))
                 .map(ToolCallback::getToolDefinition)
                 .map(ToolDefinition::name)
                 .collect(Collectors.toCollection(TreeSet::new));

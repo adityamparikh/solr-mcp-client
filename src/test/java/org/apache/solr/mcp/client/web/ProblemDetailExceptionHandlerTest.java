@@ -16,10 +16,12 @@
  */
 package org.apache.solr.mcp.client.web;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
@@ -53,5 +55,30 @@ class ProblemDetailExceptionHandlerTest {
 
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(problem.getDetail()).isEqualTo("Request validation failed");
+    }
+
+    @Test
+    void joinsEachDistinctBodyViolationOnceAndSkipsMissingMessages() {
+        MethodArgumentNotValidException exception = mock(MethodArgumentNotValidException.class);
+        BindingResult bindingResult = mock(BindingResult.class);
+        given(exception.getBindingResult()).willReturn(bindingResult);
+        List<FieldError> errors = List.of(
+                fieldError("message must not be blank"),
+                fieldError(null),
+                fieldError("message must not be blank"),
+                fieldError("message is too long"));
+        given(bindingResult.getFieldErrors()).willReturn(errors);
+
+        ProblemDetail problem = ProblemDetailExceptionHandler.invalidBody(exception);
+
+        assertThat(problem.getDetail()).isEqualTo("message must not be blank; message is too long");
+        assertThat(problem.getTitle()).isEqualTo("Request Validation Failed");
+        assertThat(problem.getProperties()).containsKey("timestamp");
+    }
+
+    private static FieldError fieldError(@Nullable String message) {
+        FieldError error = mock(FieldError.class);
+        given(error.getDefaultMessage()).willReturn(message);
+        return error;
     }
 }

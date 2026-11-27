@@ -46,6 +46,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import java.time.Instant;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Maps failures onto RFC 9457 {@link ProblemDetail} responses.
@@ -64,6 +65,15 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     private static final String FAILED_DETAIL =
             "The Solr assistant could not complete the request.";
     private static final String VALIDATION_FALLBACK = "Request validation failed";
+
+    private static final String VALIDATION_TITLE = "Request Validation Failed";
+    private static final String UNAVAILABLE_TITLE = "Upstream Unavailable";
+    private static final String FAILED_TITLE = "Upstream Request Failed";
+
+    /** Correlates a caller's problem detail with the server-side log line for the same failure. */
+    private static final String TIMESTAMP_PROPERTY = "timestamp";
+
+    private static final String MESSAGE_SEPARATOR = "; ";
 
     /**
      * Constraint violations on the request body. Overridden rather than added as a second
@@ -84,12 +94,8 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
      * asserted directly, without standing up a web context to raise the exception.
      */
     static ProblemDetail invalidBody(MethodArgumentNotValidException exception) {
-        String detail = exception.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.joining("; "));
-        return badRequest(detail);
+        return badRequest(joinDistinct(exception.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)));
     }
 
     /**
@@ -109,13 +115,9 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
      * through the different result structure this exception carries.
      */
     static ProblemDetail invalidParameter(HandlerMethodValidationException exception) {
-        String detail = exception.getParameterValidationResults().stream()
+        return badRequest(joinDistinct(exception.getParameterValidationResults().stream()
                 .flatMap(result -> result.getResolvableErrors().stream())
-                .map(MessageSourceResolvable::getDefaultMessage)
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.joining("; "));
-        return badRequest(detail);
+                .map(MessageSourceResolvable::getDefaultMessage)));
     }
 
     /** Retryable upstream conditions: an I/O timeout, or a transport that dropped mid-call. */
@@ -124,7 +126,7 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handleUpstreamUnavailable(RuntimeException exception, HttpServletResponse response) {
         log.warn("Transient upstream failure serving a chat request", exception);
         rethrowIfCommitted(exception, response);
-        return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL, "Upstream Unavailable");
+        return problem(HttpStatus.GATEWAY_TIMEOUT, UNAVAILABLE_DETAIL, UNAVAILABLE_TITLE);
     }
 
     /**
@@ -144,7 +146,7 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handleUpstreamFailure(RuntimeException exception, HttpServletResponse response) {
         log.error("Upstream failure serving a chat request", exception);
         rethrowIfCommitted(exception, response);
-        return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL, "Upstream Request Failed");
+        return problem(HttpStatus.BAD_GATEWAY, FAILED_DETAIL, FAILED_TITLE);
     }
 
     /**
@@ -175,7 +177,18 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
      */
     private static ProblemDetail badRequest(String detail) {
         return problem(HttpStatus.BAD_REQUEST, detail.isEmpty() ? VALIDATION_FALLBACK : detail,
-                "Request Validation Failed");
+                VALIDATION_TITLE);
+    }
+
+    /**
+     * Joins the violation messages both validation paths collect, dropping missing ones and
+     * repeats so a caller reads each distinct problem once.
+     */
+    private static String joinDistinct(Stream<@Nullable String> messages) {
+        return messages
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.joining(MESSAGE_SEPARATOR));
     }
 
     /**
@@ -188,7 +201,7 @@ class ProblemDetailExceptionHandler extends ResponseEntityExceptionHandler {
     private static ProblemDetail problem(HttpStatus status, String detail, String title) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setTitle(title);
-        problem.setProperty("timestamp", Instant.now());
+        problem.setProperty(TIMESTAMP_PROPERTY, Instant.now());
         return problem;
     }
 }
